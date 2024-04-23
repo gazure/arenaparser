@@ -1,121 +1,18 @@
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use crossbeam::channel::{select, unbounded, Receiver, Sender};
+use crossbeam::channel::{Receiver, select, unbounded};
 use notify::event::ModifyKind;
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use serde_json::Value;
+use crate::arena_event_parser::ArenaEventParser;
+use crate::processor::LogProcessor;
 
-const REQUEST: &str = "request";
-const PAYLOAD: &str = "Payload";
+mod processor;
+mod arena_event_parser;
 
-#[derive(Debug)]
-struct JsonProcessor {
-    json_rx: Receiver<String>,
-    writer: File,
-}
-
-impl JsonProcessor {
-    fn new(json_rx: Receiver<String>, writer: File) -> Self {
-        Self { json_rx, writer }
-    }
-
-    /// some json logs are nested and re-encoded as strings, this function will attempt to clean them up
-    fn clean_json(&self, json_log_str: String) -> Result<Value> {
-        let mut decoded_value = serde_json::from_str::<Value>(&json_log_str)?;
-        if let Some(request) = decoded_value.get(REQUEST).unwrap_or(&Value::Null).as_str() {
-            let mut decoded_request = serde_json::from_str::<Value>(request)?;
-            if let Some(payload) = decoded_request
-                .get(PAYLOAD)
-                .unwrap_or(&Value::Null)
-                .as_str()
-            {
-                let decoded_payload = serde_json::from_str::<Value>(payload)?;
-                decoded_request[PAYLOAD] = decoded_payload;
-            }
-            decoded_value[REQUEST] = decoded_request;
-        }
-        Ok(decoded_value)
-    }
-
-    fn json_processor(&mut self) {
-        while let Ok(json_str) = self.json_rx.recv() {
-            match self.clean_json(json_str) {
-                Ok(json_value) => {
-                    self.write_json(json_value);
-                }
-                Err(e) => {
-                    eprintln!("Error cleaning json: {:?}", e);
-                }
-            }
-        }
-    }
-
-    fn write_json(&mut self, json_value: Value) {
-        let json_str = serde_json::to_string(&json_value).unwrap();
-        let mut writer = BufWriter::new(&self.writer);
-        writer.write_all(json_str.as_bytes()).unwrap();
-        writer.write_all(b"\n").unwrap();
-    }
-}
-
-#[derive(Debug)]
-struct LogProcessor {
-    lines_rx: Receiver<String>,
-    json_tx: Sender<String>,
-    current_json_str: Option<String>,
-    bracket_depth: usize,
-}
-
-impl LogProcessor {
-    fn new(lines_rx: Receiver<String>, json_tx: Sender<String>) -> Self {
-        Self {
-            lines_rx,
-            json_tx,
-            current_json_str: None,
-            bracket_depth: 0,
-        }
-    }
-
-    fn log_line_processor(&mut self) {
-        while let Ok(line) = self.lines_rx.recv() {
-            self.process_line(line);
-        }
-    }
-
-    fn process_line(&mut self, line: String) {
-        for char in line.chars() {
-            match char {
-                '{' => {
-                    if self.current_json_str.is_none() {
-                        self.current_json_str = Some(String::new());
-                    }
-                    self.current_json_str.as_mut().unwrap().push('{');
-                    self.bracket_depth += 1;
-                }
-                '}' => {
-                    if let Some(json_str) = &mut self.current_json_str {
-                        json_str.push('}');
-                        self.bracket_depth -= 1;
-                        if self.bracket_depth == 0 {
-                            self.json_tx.send(json_str.clone()).unwrap();
-                            self.current_json_str = None;
-                        }
-                    }
-                }
-                ' ' | '\n' | '\r' => {}
-                _ => {
-                    if let Some(json_str) = &mut self.current_json_str {
-                        json_str.push(char);
-                    }
-                }
-            }
-        }
-    }
-}
 
 fn get_log_lines(reader: &mut impl BufRead) -> Vec<String> {
     // read lines from reader
@@ -138,9 +35,9 @@ fn get_log_lines(reader: &mut impl BufRead) -> Vec<String> {
 #[command(about = "Tries to scrape useful data from mtga detailed logs")]
 struct Args {
     #[arg(short, long)]
-    player_log_path: PathBuf,
+    player_log: PathBuf,
     #[arg(short, long)]
-    output_path: PathBuf,
+    output: PathBuf,
 }
 
 fn ctrl_c_channel() -> Result<Receiver<()>> {
@@ -154,29 +51,31 @@ fn ctrl_c_channel() -> Result<Receiver<()>> {
 fn main() -> Result<()> {
     let args = Args::try_parse()?;
 
-    let log_source = File::open(&args.player_log_path)?;
+    let log_source = File::open(&args.player_log)?;
     let output = File::options()
         .append(true)
         .create(true)
-        .open(&args.output_path)?;
+        .open(&args.output)?;
     let mut reader = BufReader::new(log_source);
 
     let ctrl_c_rx = ctrl_c_channel()?;
     let (file_tx, file_rx) = unbounded();
     let (lines_tx, lines_rx) = unbounded();
     let (json_tx, json_rx) = unbounded();
-    let mut processor = LogProcessor::new(lines_rx, json_tx);
-    let mut json_processor = JsonProcessor::new(json_rx, output);
+    let (arena_event_tx, arena_event_rx) = unbounded();
+
+    let mut log_processor = LogProcessor::new(lines_rx, json_tx, json_rx, arena_event_tx, output);
+    let mut arena_event_processor = ArenaEventParser::new(arena_event_rx);
 
     std::thread::spawn(move || {
-        processor.log_line_processor();
+        log_processor.process();
     });
     std::thread::spawn(move || {
-        json_processor.json_processor();
+        arena_event_processor.process();
     });
 
     let mut watcher = RecommendedWatcher::new(file_tx, Config::default())?;
-    watcher.watch(args.player_log_path.as_ref(), RecursiveMode::NonRecursive)?;
+    watcher.watch(args.player_log.as_ref(), RecursiveMode::NonRecursive)?;
 
     loop {
         select! {
@@ -187,7 +86,7 @@ fn main() -> Result<()> {
             recv(file_rx) -> msg => {
                 match msg {
                     Ok(Ok(event)) => {
-                        if event.paths.contains(&args.player_log_path) {
+                        if event.paths.contains(&args.player_log) {
                             match event.kind {
                                 EventKind::Create(_) => println!("Log rotated, unsure what to do with this yet"),
                                 EventKind::Modify(ModifyKind::Any) => {
