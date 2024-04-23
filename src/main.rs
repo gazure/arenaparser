@@ -4,11 +4,9 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use crossbeam::channel::{Receiver, select, Sender, unbounded};
-use notify::{
-    Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
-};
+use crossbeam::channel::{select, unbounded, Receiver, Sender};
 use notify::event::ModifyKind;
+use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde_json::Value;
 
 const REQUEST: &str = "request";
@@ -24,7 +22,6 @@ impl JsonProcessor {
     fn new(json_rx: Receiver<String>, writer: File) -> Self {
         Self { json_rx, writer }
     }
-
 
     /// some json logs are nested and re-encoded as strings, this function will attempt to clean them up
     fn clean_json(&self, json_log_str: String) -> Result<Value> {
@@ -45,18 +42,13 @@ impl JsonProcessor {
     }
 
     fn json_processor(&mut self) {
-        loop {
-            match self.json_rx.recv() {
-                Ok(json_str) => match self.clean_json(json_str) {
-                    Ok(json_value) => {
-                        self.write_json(json_value);
-                    }
-                    Err(e) => {
-                        eprintln!("Error cleaning json: {:?}", e);
-                    }
-                },
-                Err(_) => {
-                    break;
+        while let Ok(json_str) = self.json_rx.recv() {
+            match self.clean_json(json_str) {
+                Ok(json_value) => {
+                    self.write_json(json_value);
+                }
+                Err(e) => {
+                    eprintln!("Error cleaning json: {:?}", e);
                 }
             }
         }
@@ -89,15 +81,8 @@ impl LogProcessor {
     }
 
     fn log_line_processor(&mut self) {
-        loop {
-            match self.lines_rx.recv() {
-                Ok(line) => {
-                    self.process_line(line);
-                },
-                Err(_) => {
-                    break;
-                }
-            }
+        while let Ok(line) = self.lines_rx.recv() {
+            self.process_line(line);
         }
     }
 
@@ -150,7 +135,7 @@ fn get_log_lines(reader: &mut impl BufRead) -> Vec<String> {
 }
 
 #[derive(Debug, Parser)]
-#[command(about = "Tries to scrap useful data from mtga detailed logs")]
+#[command(about = "Tries to scrape useful data from mtga detailed logs")]
 struct Args {
     #[arg(short, long)]
     player_log_path: PathBuf,
@@ -170,7 +155,10 @@ fn main() -> Result<()> {
     let args = Args::try_parse()?;
 
     let log_source = File::open(&args.player_log_path)?;
-    let output = File::options().append(true).create(true).open(&args.output_path)?;
+    let output = File::options()
+        .append(true)
+        .create(true)
+        .open(&args.output_path)?;
     let mut reader = BufReader::new(log_source);
 
     let ctrl_c_rx = ctrl_c_channel()?;
@@ -178,10 +166,7 @@ fn main() -> Result<()> {
     let (lines_tx, lines_rx) = unbounded();
     let (json_tx, json_rx) = unbounded();
     let mut processor = LogProcessor::new(lines_rx, json_tx);
-    let mut json_processor = JsonProcessor::new(
-        json_rx,
-        output
-    );
+    let mut json_processor = JsonProcessor::new(json_rx, output);
 
     std::thread::spawn(move || {
         processor.log_line_processor();
@@ -190,7 +175,7 @@ fn main() -> Result<()> {
         json_processor.json_processor();
     });
 
-    let mut watcher= RecommendedWatcher::new(file_tx, Config::default())?;
+    let mut watcher = RecommendedWatcher::new(file_tx, Config::default())?;
     watcher.watch(args.player_log_path.as_ref(), RecursiveMode::NonRecursive)?;
 
     loop {
