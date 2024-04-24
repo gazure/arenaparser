@@ -12,7 +12,7 @@ pub struct LogProcessor {
     lines_rx: Receiver<String>,
     json_tx: Sender<String>,
     json_rx: Receiver<String>,
-    arena_event_tx: Sender<Value>,
+    arena_event_tx: Sender<String>,
     writer: File,
     current_json_str: Option<String>,
     bracket_depth: usize,
@@ -23,7 +23,7 @@ impl LogProcessor {
         lines_rx: Receiver<String>,
         json_tx: Sender<String>,
         json_rx: Receiver<String>,
-        arena_event_tx: Sender<Value>,
+        arena_event_tx: Sender<String>,
         writer: File,
     ) -> Self {
         Self {
@@ -96,7 +96,8 @@ impl LogProcessor {
         let mut writer = BufWriter::new(&self.writer);
         writer.write_all(json_str.as_bytes()).unwrap();
         writer.write_all(b"\n").unwrap();
-        self.arena_event_tx.send(json_value).unwrap();
+        let reencoded = serde_json::to_string(&json_value).unwrap();
+        self.arena_event_tx.send(reencoded).unwrap();
     }
 
     // try to find the json strings in the logs.

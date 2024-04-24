@@ -12,6 +12,9 @@ use crate::processor::LogProcessor;
 
 mod processor;
 mod arena_event_parser;
+mod gre;
+mod mgrc_event;
+mod client_event;
 
 
 fn get_log_lines(reader: &mut impl BufRead) -> Vec<String> {

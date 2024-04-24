@@ -1,287 +1,74 @@
+use crate::client_event::{ClientMessage, RequestTypeClientToMatchServiceMessage};
+use crate::gre::RequestTypeGREToClientEvent;
+use crate::mgrc_event::{RequestTypeMGRSCEvent, StateType};
 use anyhow::Result;
 use crossbeam::channel::Receiver;
-use serde::Deserialize;
-use serde::Serialize;
+use serde_json::Value;
+use std::fmt::{Display, Formatter};
 
-#[derive(Debug, Deserialize, Serialize)]
-struct RequestTypeMGRSCEvent {
-    #[serde(rename = "matchGameRoomStateChangedEvent")]
-    match_game_room_state_changed_event: MatchGameRoomStateChangedEvent,
-    #[serde(rename = "requestId")]
-    request_id: i32,
-    timestamp: String,
-    #[serde(rename = "transactionId")]
-    transaction_id: String,
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct MatchPlayer {
+    pub player_name: String,
+    pub team_id: i32,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-struct MatchGameRoomStateChangedEvent {
-    #[serde(rename = "gameRoomInfo")]
-    game_room_info: GameRoomInfo,
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct FinalMatchResult {
+    pub match_winner: i32,
+    pub game_winners: Vec<i32>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-struct GameRoomInfo {
-    #[serde(rename = "gameRoomConfig")]
-    game_room_config: GameRoomConfig,
-    players: Option<Vec<Player>>,
-    #[serde(rename = "finalMatchResult")]
-    final_match_result: Option<FinalMatchResult>,
-    #[serde(rename = "stateType")]
-    state_type: String,
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct ArenaMatch {
+    pub match_id: String,
+    pub players: Vec<MatchPlayer>,
+    pub final_match_result: Option<FinalMatchResult>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-struct FinalMatchResult {
-    #[serde(rename = "matchId")]
-    match_id: String,
-    #[serde(rename = "resultList")]
-    result_list: Vec<ResultList>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct ResultList {
-    scope: String,
-    #[serde(rename = "winningTeamId")]
-    winning_team_id: i32,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct GameRoomConfig {
-    #[serde(rename = "matchId")]
-    match_id: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct Player {
-    #[serde(rename = "playerName")]
-    player_name: String,
-    #[serde(rename = "systemSeatId")]
-    system_seat_id: i32,
-    #[serde(rename = "teamId")]
-    team_id: i32,
-    #[serde(rename = "userId")]
-    user_id: String,
-}
-
-
-#[derive(Debug, Deserialize, Serialize)]
-struct RequestTypeClientToMatchServiceMessage {
-    #[serde(rename = "clientToMatchServiceMessageType")]
-    client_to_match_service_message_type: String,
-    #[serde(rename = "requestId")]
-    request_id: i32,
-    #[serde(rename = "payload")]
-    payload: ClientMessage,
-    timestamp: String,
-    #[serde(rename = "transactionId")]
-    transaction_id: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "type")]
-enum ClientMessage {
-    #[serde(rename = "ClientMessageType_PerformActionResp")]
-    PerformActionResp(PerformActionResp),
-    #[serde(rename = "ClientMessageType_MulliganResp")]
-    MulliganResp(MulliganResp),
-    #[serde(rename = "ClientMessageType_UIMessage")]
-    UIMessage(UIMessage),
-    #[serde(rename = "ClientMessageType_SelectNResp")]
-    SelectNResp(SelectNResp),
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct SelectNResp {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct UIMessage {
-    #[serde(rename = "systemSeatId")]
-    system_seat_id: i32,
-    #[serde(rename = "uiMessage")]
-    ui_message: serde_json::Value,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct MulliganResp {
-    #[serde(rename = "gameStateId")]
-    game_state_id: i32,
-    #[serde(rename = "mulliganResp")]
-    mulligan_response: MulliganDecision,
-    #[serde(rename = "respId")]
-    response_id: i32,
-}
-#[derive(Debug, Deserialize, Serialize)]
-struct MulliganDecision {
-    decision: String,
-}
-
-
-#[derive(Debug, Deserialize, Serialize)]
-struct PerformActionResp {
-    #[serde(rename = "gameStateId")]
-    game_state_id: i32,
-    #[serde(rename = "performActionResp")]
-    perform_action_response: PerformActionResponse,
-    #[serde(rename = "respId")]
-    response_id: i32,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct PerformActionResponse {
-    #[serde(rename = "actions")]
-    actions: Vec<Action>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct Action {
-    #[serde(rename = "actionType")]
-    action_type: String,
-    #[serde(rename = "facetId")]
-    facet_id: i32,
-    #[serde(rename = "grpId")]
-    grp_id: i32,
-    #[serde(rename = "instanceId")]
-    instance_id: i32,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct RequestTypeGREToClientEvent {
-    #[serde(rename = "greToClientEvent")]
-    gre_to_client_event: GREToClientEvent,
-    #[serde(rename = "requestId")]
-    request_id: i32,
-    timestamp: String,
-    #[serde(rename = "transactionId")]
-    transaction_id: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct GREToClientEvent {
-    #[serde(rename = "greToClientMessages")]
-    gre_to_client_messages: Vec<GREToClientMessage>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "type")]
-enum GREToClientMessage {
-    #[serde(rename = "GREMessageType_ConnectResp")]
-    ConnectResp(ConnectResp),
-    #[serde(rename = "GREMessageType_DieRollResultsResp")]
-    DieRollResults(DieRollResultsResp),
-    #[serde(rename = "GREMessageType_GameStateMessage")]
-    GameStateMessage(GameStateMessage),
-    #[serde(rename = "GREMessageType_ChooseStartingPlayerReq")]
-    ChooseStartingPlayerReq(ChooseStartingPlayerReq),
-    #[serde(rename = "GREMessageType_MulliganReq")]
-    MulliganReq(MulliganReq),
-    #[serde(rename = "GREMessageType_SelectNReq")]
-    SelectNReq(SelectNReq),
-    #[serde(rename = "GREMessageType_ActionsAvailableReq")]
-    ActionsAvailableReq(ActionsAvailableReq),
-    #[serde(rename = "GREMessageType_SetSettingsResp")]
-    SetSettingsResp(SetSettingsResp),
-    #[serde(rename = "GREMessageType_SelectTargetsReq")]
-    SelectTargetsReq(SelectTargetsReq),
-    #[serde(rename = "GREMessageType_SubmitTargetsResp")]
-    SubmitTargetsResp(SubmitTargetsResp),
-    #[serde(rename = "GREMessageType_CastingTimeOptionsReq")]
-    CastingTimeOptionsReq(CastingTimeOptionsReq),
-    #[serde(rename = "GREMessageType_PayCostsReq")]
-    PayCostsReq(PayCostsReq),
-    #[serde(rename = "GREMessageType_SelectNResp")]
-    SelectNResp(SelectNResp),
-    #[serde(rename = "GREMessageType_DeclareAttackersReq")]
-    DeclareAttackersReq(DeclareAttackersReq),
-    #[serde(rename = "GREMessageType_SubmitAttackersResp")]
-    SubmitAttackersResp(SubmitAttackersResp),
-    #[serde(rename = "GREMessageType_IntermissionReq")]
-    IntermissionReq(IntermissionReq),
-    #[serde(rename = "GREMessageType_PromptReq")]
-    PromptReq(PromptReq),
-    #[serde(rename = "GREMessageType_QueuedGameStateMessage")]
-    QueuedGameStateMessage(QueuedGameStateMessage),
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct QueuedGameStateMessage {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct PromptReq {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct IntermissionReq {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct SubmitAttackersResp {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct DeclareAttackersReq {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct PayCostsReq {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct CastingTimeOptionsReq {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct SubmitTargetsResp {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct SelectTargetsReq {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct SetSettingsResp {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct DieRollResultsResp {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct ActionsAvailableReq {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct SelectNReq {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct MulliganReq {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct ChooseStartingPlayerReq {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct GameStateMessage {}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct ConnectResp {
-    #[serde(rename = "connectResp")]
-    connect_response: ConnectResponse,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct ConnectResponse {
-    #[serde(rename = "deckMessage")]
-    deck_message: DeckMessage,
-    settings: Option<serde_json::Value>,
-    skins: Option<serde_json::Value>,
-    status: String
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct DeckMessage {
-    #[serde(rename = "deckCards")]
-    deck_cards: Vec<i32>,
-    #[serde(rename = "sideboardCards")]
-    sideboard_cards: Vec<i32>,
+impl Display for ArenaMatch {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Match ID: {}\nPlayers: {} vs. {}\n",
+            self.match_id, self.players[0].player_name, self.players[1].player_name
+        )
+        .unwrap();
+        if let Some(final_match_result) = &self.final_match_result {
+            let game_winner_names: Vec<String> = final_match_result.game_winners.iter().map(|team_id| {
+                self.players
+                    .iter()
+                    .find(|player| player.team_id == *team_id)
+                    .unwrap()
+                    .player_name
+                    .clone()
+            }).collect();
+            let match_winner_name = self
+                .players
+                .iter()
+                .find(|player| player.team_id == final_match_result.match_winner)
+                .unwrap()
+                .player_name
+                .clone();
+            write!(
+                f,
+                "Match Winner: {}\nGame Winners: {:?}",
+                match_winner_name, game_winner_names
+            )
+            .unwrap();
+        }
+        write!(f, "")
+    }
 }
 
 #[derive(Debug)]
 pub struct ArenaEventParser {
-    arena_event_rx: Receiver<serde_json::Value>,
-    cards_db: serde_json::Value,
+    arena_event_rx: Receiver<String>,
+    cards_db: Value,
+    current_match: Option<ArenaMatch>,
 }
 
 impl ArenaEventParser {
-    pub fn new(arena_event_rx: Receiver<serde_json::Value>) -> Self {
+    pub fn new(arena_event_rx: Receiver<String>) -> Self {
         let cards_db_path = "data/cards.json";
         let cards_db_file = std::fs::File::open(cards_db_path).unwrap();
         let cards_db_reader = std::io::BufReader::new(cards_db_file);
@@ -290,41 +77,54 @@ impl ArenaEventParser {
         Self {
             arena_event_rx,
             cards_db,
+            current_match: None,
         }
     }
 
     pub fn process(&mut self) {
         while let Ok(event) = self.arena_event_rx.recv() {
-            self.process_event(event).unwrap_or(())
+            let result = self.process_event(&event);
+            if let Err(e) = result {
+                eprintln!("Error processing event: {}\n{}", e, event);
+            }
         }
     }
 
-    fn process_event(&self, event: serde_json::Value) -> Result<()> {
-        if let Ok(client_to_match_service_message) =
-            serde_json::from_value::<RequestTypeClientToMatchServiceMessage>(event.clone())
-        {
+    fn process_event(&mut self, event: &String) -> Result<()> {
+        if event.contains("clientToMatchServiceMessage") {
+            let client_to_match_service_message: RequestTypeClientToMatchServiceMessage =
+                serde_json::from_str(event)?;
+
             match client_to_match_service_message.payload {
                 ClientMessage::PerformActionResp(payload) => {
                     let action_resp_payload = payload.perform_action_response;
                     for action in action_resp_payload.actions {
-                        let grp_id = action.grp_id.to_string();
-                        let card = self.cards_db.get("cards").unwrap().get(&grp_id).unwrap();
-                        let pretty_name = card.get("pretty_name").unwrap();
-                        println!(
-                            "Action Type: {}, card_name: {}",
-                            action.action_type, pretty_name
-                        );
+                        if let Some(grp_id) = action.grp_id {
+                            let grp_id = grp_id.to_string();
+                            let card = self.cards_db.get("cards").unwrap().get(&grp_id).unwrap();
+                            let pretty_name = card.get("pretty_name").unwrap();
+                            println!(
+                                "Action Type: {}, card_name: {}",
+                                action.action_type, pretty_name
+                            );
+                        }
                     }
                 }
                 ClientMessage::MulliganResp(payload) => {
                     let mulligan_resp_payload = payload.mulligan_response;
                     println!("Mulligan Decision: {}", mulligan_resp_payload.decision);
                 }
+                ClientMessage::DeclareAttackersReq(payload) => {
+                    println!("Declare Attackers Request");
+                    payload.extra.iter().for_each(|(key, value)| {
+                        println!("{}: {}", key, *value);
+                    });
+                }
                 _ => {}
             }
-        } else if let Ok(mgrsc_event) =
-            serde_json::from_value::<RequestTypeMGRSCEvent>(event.clone())
-        {
+        } else if event.contains("matchGameRoomStateChangedEvent") {
+            let mgrsc_event: RequestTypeMGRSCEvent = serde_json::from_str(event)?;
+
             let game_room_info = mgrsc_event
                 .match_game_room_state_changed_event
                 .game_room_info;
@@ -332,45 +132,51 @@ impl ArenaEventParser {
             let players = game_room_info.players;
             let match_id = game_room_config.match_id;
             println!("Match ID: {}", match_id);
-            if let Some(players) = players {
-                for player in players {
-                    println!("Player Name: {}, Team #{}", player.player_name, player.team_id);
+            if game_room_info.state_type == StateType::Playing {
+                if let Some(players) = players {
+                    self.current_match = Some(ArenaMatch {
+                        match_id,
+                        players: players
+                            .iter()
+                            .map(|player| MatchPlayer {
+                                player_name: player.player_name.clone(),
+                                team_id: player.team_id,
+                            })
+                            .collect(),
+                        final_match_result: None,
+                    });
+                }
+            } else if game_room_info.state_type == StateType::MatchCompleted {
+                let final_match_result = game_room_info.final_match_result.unwrap();
+                if let Some(current_match) = &mut self.current_match {
+                    let mut match_result = FinalMatchResult {
+                        match_winner: 0,
+                        game_winners: Vec::new(),
+                    };
+                    for result in final_match_result.result_list {
+                        if result.scope == "MatchScope_Match" {
+                            match_result.match_winner = result.winning_team_id;
+                        } else {
+                            match_result.game_winners.push(result.winning_team_id);
+                        }
+                    }
+                    current_match.final_match_result = Some(match_result);
                 }
             }
-            if let Some(final_match_result) = game_room_info.final_match_result {
-                for result in final_match_result.result_list {
-                    if result.scope == "MatchScope_Match" {
-                        println!("Winning Team: {}", result.winning_team_id);
-                    }
-                    if result.scope == "MatchScope_Match" {
-                        println!("Match Winning Team: {}", result.winning_team_id);
-                    }
-                }
+            if let Some(current_match) = &self.current_match {
+                println!("Current Match: {}", current_match);
             }
-        } else if let Ok(request_gre_to_client_event)  = serde_json::from_value::<RequestTypeGREToClientEvent>(event.clone()) {
+        } else if event.contains("greToClientEvent") {
+            let request_gre_to_client_event: RequestTypeGREToClientEvent =
+                serde_json::from_str(event)?;
             let gre_to_client_event = request_gre_to_client_event.gre_to_client_event;
             for gre_to_client_message in gre_to_client_event.gre_to_client_messages {
                 match gre_to_client_message {
-                    GREToClientMessage::ConnectResp(payload) => {
-                        let connect_resp_payload = payload.connect_response;
-                        let deck_message = connect_resp_payload.deck_message;
-                        let main_deck_card_names = deck_message.deck_cards.iter().map(|card_id| {
-                            let card_id = card_id.to_string();
-                            let card = self.cards_db.get("cards").unwrap().get(&card_id).unwrap();
-                            card.get("pretty_name").unwrap().as_str().unwrap().to_string()
-                        }).collect::<Vec<String>>();
-                        let sideboard_card_names = deck_message.sideboard_cards.iter().map(|card_id| {
-                            let card_id = card_id.to_string();
-                            let card = self.cards_db.get("cards").unwrap().get(&card_id).unwrap();
-                            card.get("pretty_name").unwrap().as_str().unwrap().to_string()
-                        }).collect::<Vec<String>>();
-                        println!("Main Deck: {:?}", main_deck_card_names);
-                        println!("Sideboard: {:?}", sideboard_card_names);
-                    },
-                    _ => {}
+                    _ => {
+                        //TODO: figure out how to handle all the GRE to client events
+                    }
                 }
             }
-
         }
         Ok(())
     }
