@@ -1,6 +1,7 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -17,7 +18,7 @@ pub struct GREToClientEvent {
     pub gre_to_client_messages: Vec<GREToClientMessage>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(tag = "type")]
 pub enum GREToClientMessage {
     #[serde(rename = "GREMessageType_ConnectResp")]
@@ -78,12 +79,8 @@ pub enum GREToClientMessage {
     GroupReq(GroupReqWrapper),
     #[serde(rename = "GREMessageType_GroupResp")]
     GroupRespWrapper(GroupRespWrapper),
+    #[default]
     Default,
-}
-impl Default for GREToClientMessage {
-    fn default() -> Self {
-        GREToClientMessage::Default
-    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -416,17 +413,12 @@ pub struct SetSettingsResp {
     pub settings: Settings,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "mulliganType")]
 pub enum MulliganReq {
+    #[default]
     #[serde(rename = "MulliganType_London")]
     London,
-}
-
-impl Default for MulliganReq {
-    fn default() -> Self {
-        MulliganReq::London
-    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -612,9 +604,10 @@ pub struct Mana {
     pub src_instance_id: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Spec {
+    #[default]
     #[serde(rename = "ManaSpecType_Predictive")]
     Predictive,
     #[serde(rename = "ManaSpecType_FromCave")]
@@ -623,6 +616,12 @@ pub enum Spec {
     FromCreature,
     #[serde(rename = "ManaSpecType_Restricted")]
     Restricted,
+    #[serde(rename = "ManaSpecType_FromTreasure")]
+    FromTreasure,
+    #[serde(rename = "ManaSpecType_AdditionalEffect")]
+    AdditionalEffect,
+    #[serde(rename = "ManaSpecType_CantBeCountered")]
+    CantBeCountered,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -702,7 +701,7 @@ pub struct GameObject {
     pub overlay_grp_id: Option<i32>,
     pub owner_seat_id: i32,
     #[serde(rename = "type")]
-    pub type_field: String,
+    pub type_field: GameObjectType,
     #[serde(default)]
     pub viewers: Vec<i32>,
     pub visibility: String,
@@ -716,6 +715,23 @@ pub struct GameObject {
     pub is_tapped: Option<bool>,
     pub power: Option<Power>,
     pub toughness: Option<Toughness>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum GameObjectType {
+    #[default]
+    #[serde(rename = "GameObjectType_Card")]
+    Card,
+    #[serde(rename = "GameObjectType_RevealedCard")]
+    RevealedCard,
+    #[serde(rename = "GameObjectType_TriggerHolder")]
+    TriggerHolder,
+    #[serde(rename = "GameObjectType_MDFCBack")]
+    MDFCBack,
+    #[serde(rename = "GameObjectType_Ability")]
+    Ability,
+    #[serde(rename = "GameObjectType_Token")]
+    Token,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -808,13 +824,91 @@ pub struct TurnInfo {
 pub struct Zone {
     pub owner_seat_id: Option<i32>,
     #[serde(rename = "type")]
-    pub type_field: String,
-    pub visibility: String,
+    pub type_field: ZoneType,
+    pub visibility: Visibility,
     pub zone_id: i32,
     #[serde(default)]
     pub viewers: Vec<i32>,
     #[serde(default)]
     pub object_instance_ids: Vec<i32>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Visibility {
+    #[default]
+    #[serde(rename = "Visibility_Public")]
+    Public,
+    #[serde(rename = "Visibility_Private")]
+    Private,
+    #[serde(rename = "Visibility_Hidden")]
+    Hidden,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ZoneType {
+    #[default]
+    #[serde(rename = "ZoneType_Battlefield")]
+    Battlefield,
+    #[serde(rename = "ZoneType_Stack")]
+    Stack,
+    #[serde(rename = "ZoneType_Exile")]
+    Exile,
+    #[serde(rename = "ZoneType_Graveyard")]
+    Graveyard,
+    #[serde(rename = "ZoneType_Hand")]
+    Hand,
+    #[serde(rename = "ZoneType_Library")]
+    Library,
+    #[serde(rename = "ZoneType_Limbo")]
+    Limbo,
+    #[serde(rename = "ZoneType_Sideboard")]
+    Sideboard,
+    #[serde(rename = "ZoneType_Pending")]
+    Pending,
+    #[serde(rename = "ZoneType_Suppressed")]
+    Suppressed,
+    #[serde(rename = "ZoneType_Revealed")]
+    Revealed,
+    #[serde(rename = "ZoneType_RevealedSideboard")]
+    RevealedSideboard,
+    #[serde(rename = "ZoneType_RevealedExile")]
+    RevealedExile,
+    #[serde(rename = "ZoneType_RevealedGraveyard")]
+    RevealedGraveyard,
+    #[serde(rename = "ZoneType_RevealedHand")]
+    RevealedHand,
+    #[serde(rename = "ZoneType_RevealedLibrary")]
+    RevealedLibrary,
+    #[serde(rename = "ZoneType_RevealedLimbo")]
+    RevealedLimbo,
+    #[serde(rename = "ZoneType_RevealedStack")]
+    RevealedStack,
+    #[serde(rename = "ZoneType_RevealedBattlefield")]
+    RevealedBattlefield,
+    #[serde(rename = "ZoneType_RevealedCommand")]
+    RevealedCommand,
+    #[serde(rename = "ZoneType_Command")]
+    Command,
+    #[serde(rename = "ZoneType_RevealedCommandZone")]
+    RevealedCommandZone,
+    #[serde(rename = "ZoneType_RevealedTemporary")]
+    RevealedTemporary,
+    #[serde(rename = "ZoneType_Temporary")]
+    Temporary,
+    #[serde(rename = "ZoneType_RevealedTemporaryZone")]
+    RevealedTemporaryZone,
+    #[serde(rename = "ZoneType_RevealedToken")]
+    RevealedToken,
+    #[serde(rename = "ZoneType_Token")]
+    Token,
+    #[serde(rename = "ZoneType_RevealedTokenZone")]
+    RevealedTokenZone,
+    #[serde(rename = "ZoneType_RevealedPlayer")]
+    RevealedPlayer,
+    #[serde(rename = "ZoneType_Player")]
+    Player,
+    #[serde(rename = "ZoneType_RevealedPlayerZone")]
+    RevealedPlayerZone,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -835,6 +929,7 @@ pub struct PlayerDieRoll {
 pub struct Player {
     pub controller_seat_id: i32,
     pub controller_type: String,
+    #[serde(default)]
     pub life_total: i32,
     pub max_hand_size: i32,
     pub starting_life_total: i32,

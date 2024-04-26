@@ -1,5 +1,6 @@
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -190,13 +191,13 @@ pub struct DeclareAttackersResp {
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SelectTargetsResp {
     #[serde(flatten)]
-   pub  extra: HashMap<String, Value>,
+    pub extra: HashMap<String, Value>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SubmitTargetsReq {
     #[serde(flatten)]
-    pub    extra: HashMap<String, Value>,
+    pub extra: HashMap<String, Value>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
