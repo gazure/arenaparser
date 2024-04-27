@@ -1,62 +1,13 @@
 use anyhow::Result;
-use bevy::prelude::{Event, EventReader, EventWriter, Res, Resource};
+use bevy::prelude::{EventReader, EventWriter, Res};
 use serde_json::Value;
 
-use crate::ArenaEvent;
+use crate::{ArenaEvent, CardsDatabase, MatchEvent};
 use crate::mtga_events::client::{ClientMessage, RequestTypeClientToMatchServiceMessage};
-use crate::mtga_events::gre::{
-    Annotation, GameObject, GreMeta, GREToClientMessage, MulliganReq, MulliganReqWrapper,
-    Parameter, RequestTypeGREToClientEvent, Zone,
-};
+use crate::mtga_events::gre::{GreMeta, GREToClientMessage, MulliganReq, MulliganReqWrapper, Parameter, RequestTypeGREToClientEvent};
 use crate::mtga_events::mgrc_event::{
-    Player, RequestTypeMGRSCEvent, ResultList, StateType,
+    RequestTypeMGRSCEvent, StateType,
 };
-
-#[derive(Debug, Clone, PartialEq, Event)]
-pub enum MatchEvent {
-    MatchBegin {
-        match_id: String,
-        players: Vec<Player>,
-    },
-    MatchComplete {
-        match_id: String,
-        result_list: Vec<ResultList>,
-    },
-    ClientAction {
-        action_type: String,
-        card_name: String,
-    },
-    ServerMulliganRequest {
-        cards_in_hand: i32,
-        seat_id: i32,
-        mulligan_type: MulliganReq,
-    },
-    MulliganDecision(String),
-    DeckMessage(Vec<i32>, Vec<i32>),
-    ZoneInfo(Zone),
-    GameObject(GameObject),
-    GameObjectDeleted(i32),
-    Annotation(Annotation),
-    PersistentAnnotation(Annotation),
-}
-
-#[derive(Debug, Resource)]
-pub struct ArenaEventParser {
-    cards_db: Value,
-}
-
-impl ArenaEventParser {
-    pub fn new() -> Self {
-        let cards_db_path = "data/cards.json";
-        let cards_db_file = std::fs::File::open(cards_db_path).unwrap();
-        let cards_db_reader = std::io::BufReader::new(cards_db_file);
-        let cards_db = serde_json::from_reader(cards_db_reader).unwrap();
-
-        Self {
-            cards_db,
-        }
-    }
-}
 
 pub fn do_process_arena_event(cards_db: &Value, event: &ArenaEvent, mut match_event_writer: &mut EventWriter<MatchEvent>) -> Result<()> {
     let event = event.event.as_str();
@@ -69,7 +20,7 @@ pub fn do_process_arena_event(cards_db: &Value, event: &ArenaEvent, mut match_ev
                 for action in action_resp_payload.actions {
                     if let Some(grp_id) = action.grp_id {
                         let grp_id = grp_id.to_string();
-                        let card = cards_db.get("cards").unwrap().get(&grp_id).unwrap();
+                        let card = cards_db.get(&grp_id).unwrap();
                         let pretty_name = card.get("pretty_name").unwrap();
                         match_event_writer.send(MatchEvent::ClientAction {
                             action_type: action.action_type,
@@ -82,6 +33,9 @@ pub fn do_process_arena_event(cards_db: &Value, event: &ArenaEvent, mut match_ev
                 match_event_writer.send(MatchEvent::MulliganDecision(
                     payload.mulligan_response.decision,
                 ));
+            }
+            ClientMessage::ChooseStartingPlayerResp(resp) => {
+                match_event_writer.send(MatchEvent::StartingPlayerResponse(resp.team_id));
             }
             _ => {}
         }
@@ -121,13 +75,13 @@ pub fn do_process_arena_event(cards_db: &Value, event: &ArenaEvent, mut match_ev
     }
     Ok(())
 }
-pub fn process_arena_event(parser: Res<ArenaEventParser>, mut event_reader: EventReader<ArenaEvent>, mut match_event_writer: EventWriter<MatchEvent>) {
-    let cards_db = &parser.cards_db;
+pub fn process_arena_event(cards: Res<CardsDatabase>, mut event_reader: EventReader<ArenaEvent>, mut match_event_writer: EventWriter<MatchEvent>) {
+    let cards_db = &cards.db;
     for event in event_reader.read() {
         match do_process_arena_event(cards_db, event, &mut match_event_writer) {
             Ok(_) => {}
             Err(e) => {
-                eprintln!("Error processing event: {:?}", e);
+                eprintln!("Error processing event: {}, {}", e, event.event);
             }
         }
     }
@@ -136,29 +90,17 @@ pub fn process_arena_event(parser: Res<ArenaEventParser>, mut event_reader: Even
 fn process_gre_message(message: GREToClientMessage, match_event_writer: &mut EventWriter<MatchEvent>) {
     match message {
         GREToClientMessage::GameStateMessage(wrapper) => {
-            let game_state_message = wrapper.game_state_message;
-            let _players = game_state_message.players;
-            let _turn_info = game_state_message.turn_info;
-            game_state_message
-                .game_objects
-                .iter()
-                .for_each(|game_object| {
-                    match_event_writer.send(MatchEvent::GameObject(game_object.clone()));
-                });
-            game_state_message
-                .annotations
-                .iter()
-                .for_each(|annotation| {
-                    match_event_writer.send(MatchEvent::Annotation(annotation.clone()));
-                });
-            game_state_message.zones.iter().for_each(|zone| {
-                match_event_writer.send(MatchEvent::ZoneInfo(zone.clone()));
-            });
-            game_state_message.diff_deleted_instance_ids.iter().for_each(|instance_id| {
-                match_event_writer.send(MatchEvent::GameObjectDeleted(*instance_id));
-            });
-            game_state_message.persistent_annotations.iter().for_each(|annotation| {
-                match_event_writer.send(MatchEvent::PersistentAnnotation(annotation.clone()));
+            let game_state = wrapper.game_state_message;
+            let annotations = game_state.annotations;
+            let game_objects = game_state.game_objects;
+            let zones = game_state.zones;
+            let turn_info = game_state.turn_info;
+            match_event_writer.send(MatchEvent::GameStateMessage {
+                game_state_id: game_state.game_state_id,
+                annotations,
+                game_objects,
+                zones,
+                turn_info
             });
         }
         GREToClientMessage::ConnectResp(wrapper) => {
@@ -172,7 +114,10 @@ fn process_gre_message(message: GREToClientMessage, match_event_writer: &mut Eve
         }
         GREToClientMessage::MulliganReq(wrapper) => match wrapper {
             MulliganReqWrapper {
-                mulligan_req: mulligan_type,
+                mulligan_req: MulliganReq {
+                    mulligan_count,
+                    type_field: mulligan_type,
+                },
                 prompt: Some(prompt),
                 meta:
                     GreMeta {
@@ -195,6 +140,7 @@ fn process_gre_message(message: GREToClientMessage, match_event_writer: &mut Eve
                         match_event_writer.send(MatchEvent::ServerMulliganRequest {
                                 cards_in_hand: *cards_in_hand,
                                 seat_id: *seat_id,
+                                mulligan_count,
                                 mulligan_type,
                             });
                     }

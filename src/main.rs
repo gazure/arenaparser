@@ -9,9 +9,12 @@ use bevy::prelude::*;
 use bevy_crossbeam_event::CrossbeamEventApp;
 use clap::Parser;
 use crossbeam::channel::{Receiver, unbounded};
+use serde_json::Value;
 
-use crate::arena_event_parser::{ArenaEventParser, MatchEvent, process_arena_event};
-use crate::match_event_handler::process_match_event;
+use crate::arena_event_parser::process_arena_event;
+use crate::match_event_handler::{echo_game_state, process_match_event};
+use crate::mtga_events::gre::{Annotation, GameObject, MulliganType, TurnInfo, Zone};
+use crate::mtga_events::mgrc_event::{Player, ResultList};
 use crate::processor::{clean_json, LogProcessor, process_line};
 
 mod arena_event_parser;
@@ -38,6 +41,70 @@ struct JsonEvent {
 #[derive(Debug, Event)]
 struct ArenaEvent {
     event: String,
+}
+
+#[derive(Debug, Event)]
+struct GameStateUpdated;
+
+#[derive(Debug, Clone, PartialEq, Event)]
+pub enum MatchEvent {
+    MatchBegin {
+        match_id: String,
+        players: Vec<Player>,
+    },
+    MatchComplete {
+        match_id: String,
+        result_list: Vec<ResultList>,
+    },
+    StartingPlayerResponse(i32),
+    ClientAction {
+        action_type: String,
+        card_name: String,
+    },
+    ServerMulliganRequest {
+        cards_in_hand: i32,
+        seat_id: i32,
+        mulligan_count: i32,
+        mulligan_type: MulliganType,
+    },
+    MulliganDecision(String),
+    DeckMessage(Vec<i32>, Vec<i32>),
+    GameStateMessage {
+        game_state_id: i32,
+        annotations: Vec<Annotation>,
+        game_objects: Vec<GameObject>,
+        zones: Vec<Zone>,
+        turn_info: Option<TurnInfo>,
+    },
+}
+
+#[derive(Debug, Resource)]
+pub struct CardsDatabase {
+    pub db: Value,
+}
+
+impl CardsDatabase {
+    pub fn new() -> Self {
+        let cards_db_path = "data/cards.json";
+        let cards_db_file = File::open(cards_db_path).unwrap();
+        let cards_db_reader = BufReader::new(cards_db_file);
+        let cards_db: Value = serde_json::from_reader(cards_db_reader).unwrap();
+        let cards_db = cards_db.get("cards").unwrap().clone();
+
+        Self {
+            db: cards_db,
+        }
+    }
+
+    pub fn get_pretty_name(&self, grp_id: &str) -> Result<String> {
+        self.db.get(grp_id)
+            .ok_or_else(|| anyhow::anyhow!("Card not found in database"))
+            .and_then(|card| card.get("pretty_name")
+                .ok_or_else(|| anyhow::anyhow!("Card does not have a pretty name"))
+                .and_then(|pretty_name| pretty_name.as_str()
+                    .ok_or_else(|| anyhow::anyhow!("Pretty name is not a string"))
+                    .map(|pretty_name| pretty_name.to_string())))
+    }
 }
 
 fn check_new_log_lines(
@@ -106,7 +173,7 @@ fn main() -> Result<()> {
     };
 
     let log_processor = LogProcessor::new(output);
-    let arena_event_processor = ArenaEventParser::new();
+    let arena_event_processor = CardsDatabase::new();
 
     App::new()
         .add_plugins(MinimalPlugins)
@@ -114,6 +181,7 @@ fn main() -> Result<()> {
         .add_crossbeam_event::<JsonEvent>()
         .add_crossbeam_event::<ArenaEvent>()
         .add_crossbeam_event::<MatchEvent>()
+        .add_crossbeam_event::<GameStateUpdated>()
         .insert_resource(LogReader {
             reader,
             timer: Timer::new(Duration::from_secs(1), TimerMode::Repeating),
@@ -124,9 +192,10 @@ fn main() -> Result<()> {
         .add_systems(Update, process_line)
         .add_systems(Update, clean_json)
         .add_systems(Update, process_arena_event)
-        .add_systems(Update, process_match_event)
+        .add_systems(Update, (process_match_event, echo_game_state).chain())
         .add_systems(Update, exit_system)
         .run();
 
     Ok(())
 }
+

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -413,9 +414,16 @@ pub struct SetSettingsResp {
     pub settings: Settings,
 }
 
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MulliganReq {
+    #[serde(default)]
+    pub mulligan_count: i32,
+    pub type_field: MulliganType
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "mulliganType")]
-pub enum MulliganReq {
+pub enum MulliganType {
     #[default]
     #[serde(rename = "MulliganType_London")]
     London,
@@ -652,25 +660,39 @@ pub struct Annotation {
     pub affector_id: Option<i32>,
     pub id: i32,
     #[serde(rename = "type")]
-    pub type_field: Vec<String>,
+    pub type_field: Vec<AnnotationType>,
     #[serde(default)]
     pub details: Vec<AnnotationDetail>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AnnotationType {
+    #[serde(rename = "AnnotationType_ResolutionStart")]
     ResolutionStart,
+    #[serde(rename = "AnnotationType_ResolutionComplete")]
     ResolutionComplete,
+    #[serde(rename = "AnnotationType_RevealedCardCreated")]
     RevealedCardCreated,
+    #[serde(rename = "AnnotationType_RevealedCardDeleted")]
     RevealedCardDeleted,
+    #[serde(rename = "AnnotationType_ObjectIdChanged")]
     ObjectIdChanged,
+    #[serde(rename = "AnnotationType_ZoneTransfer")]
     ZoneTransfer,
+    #[serde(rename = "AnnotationType_SyntheticEvent")]
     SyntheticEvent,
+    #[serde(rename = "AnnotationType_ModifiedLife")]
     ModifiedLife,
+    #[serde(rename = "AnnotationType_EnteredZoneThisTurn")]
     EnteredZoneThisTurn,
+    #[serde(rename = "AnnotationType_PhaseOrStepModified")]
     PhaseOrStepModified,
+    #[serde(rename = "AnnotationType_NewTurnStarted")]
     NewTurnStarted,
+    #[serde(rename = "AnnotationType_UserActionTaken")]
     UserActionTaken,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

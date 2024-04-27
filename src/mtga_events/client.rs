@@ -135,9 +135,12 @@ pub struct SubmitDeckResp {
 
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChooseStartingPlayerResp {
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
+    #[serde(default)]
+    pub system_seat_id: i32,
+    pub team_id: i32,
+    pub team_type: String,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
@@ -215,6 +218,7 @@ pub struct SelectNResp {
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct UIMessage {
     #[serde(rename = "systemSeatId")]
+    #[serde(default)]
     pub system_seat_id: i32,
     #[serde(rename = "uiMessage")]
     pub ui_message: Value,
