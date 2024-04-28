@@ -1,16 +1,14 @@
+#![allow(unused)]
 use anyhow::Result;
-use bevy::prelude::{EventReader, EventWriter, Res};
-use serde_json::Value;
 
-use crate::{ArenaEvent, CardsDatabase, MatchEvent};
+use crate::{CardsDatabase, CARDS_DB};
 use crate::mtga_events::client::{ClientMessage, RequestTypeClientToMatchServiceMessage};
 use crate::mtga_events::gre::{GreMeta, GREToClientMessage, MulliganReq, MulliganReqWrapper, Parameter, RequestTypeGREToClientEvent};
 use crate::mtga_events::mgrc_event::{
     RequestTypeMGRSCEvent, StateType,
 };
 
-pub fn do_process_arena_event(cards_db: &Value, event: &ArenaEvent, mut match_event_writer: &mut EventWriter<MatchEvent>) -> Result<()> {
-    let event = event.event.as_str();
+pub fn do_process_arena_event(event: &str) -> Result<()> {
     if event.contains("clientToMatchServiceMessage") {
         let client_to_match_service_message: RequestTypeClientToMatchServiceMessage =
             serde_json::from_str(event)?;
@@ -20,22 +18,13 @@ pub fn do_process_arena_event(cards_db: &Value, event: &ArenaEvent, mut match_ev
                 for action in action_resp_payload.actions {
                     if let Some(grp_id) = action.grp_id {
                         let grp_id = grp_id.to_string();
-                        let card = cards_db.get(&grp_id).unwrap();
-                        let pretty_name = card.get("pretty_name").unwrap();
-                        match_event_writer.send(MatchEvent::ClientAction {
-                            action_type: action.action_type,
-                            card_name: pretty_name.as_str().unwrap().to_string(),
-                        });
+                        let pretty_name = CARDS_DB.get_pretty_name(&grp_id).unwrap();
                     }
                 }
             }
             ClientMessage::MulliganResp(payload) => {
-                match_event_writer.send(MatchEvent::MulliganDecision(
-                    payload.mulligan_response.decision,
-                ));
             }
             ClientMessage::ChooseStartingPlayerResp(resp) => {
-                match_event_writer.send(MatchEvent::StartingPlayerResponse(resp.team_id));
             }
             _ => {}
         }
@@ -51,18 +40,10 @@ pub fn do_process_arena_event(cards_db: &Value, event: &ArenaEvent, mut match_ev
         match game_room_info.state_type {
             StateType::Playing => {
                 if let Some(players) = players {
-                    match_event_writer.send(MatchEvent::MatchBegin {
-                        match_id: match_id.clone(),
-                        players: players.clone(),
-                    });
                 }
             }
             StateType::MatchCompleted => {
                 let final_match_result = game_room_info.final_match_result.unwrap();
-                match_event_writer.send(MatchEvent::MatchComplete {
-                    match_id: final_match_result.match_id.clone(),
-                    result_list: final_match_result.result_list.clone(),
-                });
             }
         }
     } else if event.contains("greToClientEvent") {
@@ -70,24 +51,16 @@ pub fn do_process_arena_event(cards_db: &Value, event: &ArenaEvent, mut match_ev
             serde_json::from_str(event)?;
         let gre_to_client_event = request_gre_to_client_event.gre_to_client_event;
         for gre_to_client_message in gre_to_client_event.gre_to_client_messages {
-            process_gre_message(gre_to_client_message, &mut match_event_writer);
+            process_gre_message(gre_to_client_message, );
         }
     }
     Ok(())
 }
-pub fn process_arena_event(cards: Res<CardsDatabase>, mut event_reader: EventReader<ArenaEvent>, mut match_event_writer: EventWriter<MatchEvent>) {
+pub fn process_arena_event(cards: CardsDatabase) {
     let cards_db = &cards.db;
-    for event in event_reader.read() {
-        match do_process_arena_event(cards_db, event, &mut match_event_writer) {
-            Ok(_) => {}
-            Err(e) => {
-                eprintln!("Error processing event: {}, {}", e, event.event);
-            }
-        }
-    }
 }
 
-fn process_gre_message(message: GREToClientMessage, match_event_writer: &mut EventWriter<MatchEvent>) {
+fn process_gre_message(message: GREToClientMessage) {
     match message {
         GREToClientMessage::GameStateMessage(wrapper) => {
             let game_state = wrapper.game_state_message;
@@ -95,19 +68,11 @@ fn process_gre_message(message: GREToClientMessage, match_event_writer: &mut Eve
             let game_objects = game_state.game_objects;
             let zones = game_state.zones;
             let turn_info = game_state.turn_info;
-            match_event_writer.send(MatchEvent::GameStateMessage {
-                game_state_id: game_state.game_state_id,
-                annotations,
-                game_objects,
-                zones,
-                turn_info
-            });
         }
         GREToClientMessage::ConnectResp(wrapper) => {
             let connect = wrapper.connect_resp;
             let maindeck = connect.deck_message.deck_cards;
             let sideboard = connect.deck_message.sideboard_cards;
-            match_event_writer.send(MatchEvent::DeckMessage(maindeck, sideboard));
         }
         GREToClientMessage::ChooseStartingPlayerReq(_) => {
             // Nothing of interest in here, check Client message
@@ -137,12 +102,6 @@ fn process_gre_message(message: GREToClientMessage, match_event_writer: &mut Eve
                         number_value: Some(cards_in_hand),
                         ..
                     }] => {
-                        match_event_writer.send(MatchEvent::ServerMulliganRequest {
-                                cards_in_hand: *cards_in_hand,
-                                seat_id: *seat_id,
-                                mulligan_count,
-                                mulligan_type,
-                            });
                     }
                     _ => {}
                 }

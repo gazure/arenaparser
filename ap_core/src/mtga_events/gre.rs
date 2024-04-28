@@ -1,5 +1,5 @@
+
 use std::collections::HashMap;
-use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -419,6 +419,7 @@ pub struct SetSettingsResp {
 pub struct MulliganReq {
     #[serde(default)]
     pub mulligan_count: i32,
+    #[serde(rename = "mulliganType")]
     pub type_field: MulliganType
 }
 
