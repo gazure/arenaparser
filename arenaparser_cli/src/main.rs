@@ -10,7 +10,7 @@ use crossbeam::channel::{Receiver, select, unbounded};
 use ap_core::arena_event_parser;
 use ap_core::replay::MatchReplayBuilder;
 
-use crate::processor::{clean_json, LogProcessor};
+use crate::processor::LogProcessor;
 
 mod processor;
 
@@ -34,11 +34,11 @@ fn get_log_lines(reader: &mut impl BufRead) -> Vec<String> {
 #[derive(Debug, Parser)]
 #[command(about = "Tries to scrape useful data from mtga detailed logs")]
 struct Args {
-    #[arg(short, long)]
+    #[arg(short, long, help = "Location of Player.log file")]
     player_log: PathBuf,
-    #[arg(short, long)]
-    output: PathBuf,
-    #[arg(short, long, action = clap::ArgAction::SetTrue)]
+    #[arg(short, long, help = "directory to write replay output files")]
+    output_dir: PathBuf,
+    #[arg(short, long, action = clap::ArgAction::SetTrue, help = "wait for new events on Player.log, useful if you are actively playing MTGA")]
     follow: bool,
 }
 
@@ -54,13 +54,9 @@ fn main() -> Result<()> {
     let args = Args::try_parse()?;
 
     let log_source = File::open(&args.player_log)?;
-    let output = File::options()
-        .append(true)
-        .create(true)
-        .open(&args.output)?;
     let mut reader = BufReader::new(log_source);
-    let mut processor = LogProcessor::new(output);
-    let mut match_replay_builder = MatchReplayBuilder::default();
+    let mut processor = LogProcessor::new();
+    let mut match_replay_builder = MatchReplayBuilder::new(args.output_dir);
     let follow = args.follow;
 
     let ctrl_c_rx = ctrl_c_channel()?;
@@ -75,10 +71,6 @@ fn main() -> Result<()> {
                 for line in lines {
                     let json_lines = processor.process_line(&line);
                     for json_line in json_lines {
-                        let cleaned_json = clean_json(&json_line);
-                        if let Some(cleaned_json) = cleaned_json {
-                            processor.write_json(cleaned_json);
-                        }
                         let parse_output= arena_event_parser::parse(&json_line);
                         match parse_output {
                             Ok(po) => {

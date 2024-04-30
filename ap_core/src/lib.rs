@@ -1,14 +1,14 @@
-pub mod mtga_events;
 pub mod arena_event_parser;
+pub mod mtga_events;
 pub mod replay;
 
-use anyhow::{anyhow, Result};
-use std::fs::File;
-use std::io::BufReader;
-use lazy_static::lazy_static;
-use serde_json::Value;
 use crate::mtga_events::gre::{Annotation, GameObject, MulliganType, TurnInfo, Zone};
 use crate::mtga_events::mgrsc::{Player, ResultList};
+use anyhow::Result;
+use lazy_static::lazy_static;
+use serde_json::Value;
+use std::fs::File;
+use std::io::BufReader;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MatchEvent {
@@ -57,7 +57,6 @@ impl CardsDatabase {
         let cards_db_file = File::open(cards_db_path)?;
         let cards_db_reader = BufReader::new(cards_db_file);
         let cards_db: Value = serde_json::from_reader(cards_db_reader)?;
-        let cards_db = cards_db.get("cards").ok_or(anyhow!("Cards not found"))?.clone();
 
         Ok(Self { db: cards_db })
     }
@@ -76,5 +75,10 @@ impl CardsDatabase {
                             .map(|pretty_name| pretty_name.to_string())
                     })
             })
+    }
+
+    pub fn get_pretty_name_defaulted(&self, grp_id: &str) -> String {
+        self.get_pretty_name(grp_id)
+            .unwrap_or_else(|_| grp_id.to_string())
     }
 }

@@ -17,6 +17,7 @@ fn write_line<T>(writer: &mut BufWriter<File>, line: &T)  -> anyhow::Result<()> 
 
 #[derive(Debug, Default)]
 pub struct MatchReplayBuilder {
+    pub output_dir: PathBuf,
     pub match_id: String,
     pub mgrsc_messages: Vec<RequestTypeMGRSCEvent>,
     pub gre_messages: Vec<RequestTypeGREToClientEvent>,
@@ -24,6 +25,14 @@ pub struct MatchReplayBuilder {
 }
 
 impl MatchReplayBuilder {
+
+    pub fn new(output_dir: PathBuf) -> Self {
+        Self {
+            output_dir,
+            ..Default::default()
+        }
+    }
+
     pub fn reset(&mut self) {
         self.mgrsc_messages.clear();
         self.gre_messages.clear();
