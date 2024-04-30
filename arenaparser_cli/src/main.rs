@@ -5,11 +5,14 @@ use std::time::Duration;
 
 use anyhow::Result;
 use clap::Parser;
-use crossbeam::channel::{Receiver, unbounded, select};
+use crossbeam::channel::{Receiver, select, unbounded};
 
-use crate::processor::{clean_json, LogProcessor, process_line};
+use ap_core::arena_event_parser;
+use ap_core::replay::MatchReplayBuilder;
+
+use crate::processor::{clean_json, LogProcessor};
+
 mod processor;
-
 
 fn get_log_lines(reader: &mut impl BufRead) -> Vec<String> {
     // read lines from reader
@@ -35,6 +38,8 @@ struct Args {
     player_log: PathBuf,
     #[arg(short, long)]
     output: PathBuf,
+    #[arg(short, long, action = clap::ArgAction::SetTrue)]
+    follow: bool,
 }
 
 fn ctrl_c_channel() -> Result<Receiver<()>> {
@@ -55,9 +60,10 @@ fn main() -> Result<()> {
         .open(&args.output)?;
     let mut reader = BufReader::new(log_source);
     let mut processor = LogProcessor::new(output);
+    let mut match_replay_builder = MatchReplayBuilder::default();
+    let follow = args.follow;
 
     let ctrl_c_rx = ctrl_c_channel()?;
-
 
     loop {
         select! {
@@ -67,13 +73,33 @@ fn main() -> Result<()> {
             default(Duration::from_secs(1)) => {
                 let lines = get_log_lines(&mut reader);
                 for line in lines {
-                    let json_lines = process_line(&mut processor, &line);
+                    let json_lines = processor.process_line(&line);
                     for json_line in json_lines {
                         let cleaned_json = clean_json(&json_line);
                         if let Some(cleaned_json) = cleaned_json {
                             processor.write_json(cleaned_json);
                         }
+                        let parse_output= arena_event_parser::parse(&json_line);
+                        match parse_output {
+                            Ok(po) => {
+                                if let Some(mgrc_message) = po.mgrc_message {
+                                    match_replay_builder.ingest_mgrc_event(mgrc_message);
+                                }
+                                if let Some(gre_message) = po.gre_message {
+                                    match_replay_builder.gre_messages.push(gre_message);
+                                }
+                                if let Some(client_message) = po.client_message {
+                                    match_replay_builder.client_messages.push(client_message);
+                                }
+
+
+                            },
+                            Err(e) => eprintln!("Error parsing json: {}\n{}", e, &json_line),
+                        }
                     }
+                }
+                if !follow {
+                    break;
                 }
             }
         }
@@ -81,4 +107,3 @@ fn main() -> Result<()> {
 
     Ok(())
 }
-

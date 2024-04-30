@@ -4,62 +4,48 @@ use anyhow::Result;
 use crate::{CardsDatabase, CARDS_DB};
 use crate::mtga_events::client::{ClientMessage, RequestTypeClientToMatchServiceMessage};
 use crate::mtga_events::gre::{GreMeta, GREToClientMessage, MulliganReq, MulliganReqWrapper, Parameter, RequestTypeGREToClientEvent};
-use crate::mtga_events::mgrc_event::{
+use crate::mtga_events::mgrsc::{
     RequestTypeMGRSCEvent, StateType,
 };
 
-pub fn do_process_arena_event(event: &str) -> Result<()> {
+pub struct ParseOutput {
+    pub gre_message: Option<RequestTypeGREToClientEvent>,
+    pub client_message: Option<RequestTypeClientToMatchServiceMessage>,
+    pub mgrc_message: Option<RequestTypeMGRSCEvent>,
+}
+
+pub fn parse(event: &str) -> Result<ParseOutput> {
     if event.contains("clientToMatchServiceMessage") {
         let client_to_match_service_message: RequestTypeClientToMatchServiceMessage =
             serde_json::from_str(event)?;
-        match client_to_match_service_message.payload {
-            ClientMessage::PerformActionResp(payload) => {
-                let action_resp_payload = payload.perform_action_response;
-                for action in action_resp_payload.actions {
-                    if let Some(grp_id) = action.grp_id {
-                        let grp_id = grp_id.to_string();
-                        let pretty_name = CARDS_DB.get_pretty_name(&grp_id).unwrap();
-                    }
-                }
-            }
-            ClientMessage::MulliganResp(payload) => {
-            }
-            ClientMessage::ChooseStartingPlayerResp(resp) => {
-            }
-            _ => {}
-        }
+        Ok(ParseOutput {
+            gre_message: None,
+            client_message: Some(client_to_match_service_message),
+            mgrc_message: None,
+        })
     } else if event.contains("matchGameRoomStateChangedEvent") {
         let mgrsc_event: RequestTypeMGRSCEvent = serde_json::from_str(event)?;
-
-        let game_room_info = mgrsc_event
-            .match_game_room_state_changed_event
-            .game_room_info;
-        let game_room_config = game_room_info.game_room_config;
-        let players = game_room_info.players;
-        let match_id = game_room_config.match_id;
-        match game_room_info.state_type {
-            StateType::Playing => {
-                if let Some(players) = players {
-                }
-            }
-            StateType::MatchCompleted => {
-                let final_match_result = game_room_info.final_match_result.unwrap();
-            }
-        }
+        Ok(ParseOutput {
+            gre_message: None,
+            client_message: None,
+            mgrc_message: Some(mgrsc_event),
+        })
     } else if event.contains("greToClientEvent") {
         let request_gre_to_client_event: RequestTypeGREToClientEvent =
             serde_json::from_str(event)?;
-        let gre_to_client_event = request_gre_to_client_event.gre_to_client_event;
-        for gre_to_client_message in gre_to_client_event.gre_to_client_messages {
-            process_gre_message(gre_to_client_message, );
-        }
+        Ok(ParseOutput {
+            gre_message: Some(request_gre_to_client_event),
+            client_message: None,
+            mgrc_message: None,
+        })
+    } else {
+        Ok(ParseOutput {
+            gre_message: None,
+            client_message: None,
+            mgrc_message: None,
+        })
     }
-    Ok(())
 }
-pub fn process_arena_event(cards: CardsDatabase) {
-    let cards_db = &cards.db;
-}
-
 fn process_gre_message(message: GREToClientMessage) {
     match message {
         GREToClientMessage::GameStateMessage(wrapper) => {

@@ -13,6 +13,7 @@ pub struct LogProcessor {
     bracket_depth: usize,
 }
 
+// I have a crippling OOP addiction, don't I
 impl LogProcessor {
     pub fn new(
         writer: File,
@@ -24,6 +25,41 @@ impl LogProcessor {
         }
     }
 
+    // try to find the json strings in the logs. ignoring all other info
+    // purges whitespace from the internal json strings, but I don't think that will cause
+    // any issues given the log entries I've read
+    pub fn process_line(&mut self, log_line: &str) -> Vec<String>{
+        let mut completed_json_strings = Vec::new();
+        for char in log_line.chars() {
+            match char {
+                '{' => {
+                    if self.current_json_str.is_none() {
+                        self.current_json_str = Some(String::new());
+                    }
+                    self.current_json_str.as_mut().unwrap().push('{');
+                    self.bracket_depth += 1;
+                }
+                '}' => {
+                    if let Some(json_str) = &mut self.current_json_str {
+                        json_str.push('}');
+                        self.bracket_depth -= 1;
+                        if self.bracket_depth == 0 {
+                            completed_json_strings.push(json_str.clone());
+                            self.current_json_str = None;
+                        }
+                    }
+                }
+                ' ' | '\n' | '\r' => {}
+                _ => {
+                    if let Some(json_str) = &mut self.current_json_str {
+                        json_str.push(char);
+                    }
+                }
+            }
+        }
+        completed_json_strings
+    }
+
     pub fn write_json(&mut self, json_str: String) {
         let mut writer = BufWriter::new(&self.writer);
         writer.write_all(json_str.as_bytes()).unwrap();
@@ -32,6 +68,7 @@ impl LogProcessor {
 }
 
 /// some json logs are nested and re-encoded as strings, this function will attempt to clean them up
+/// addendum: I am not sure the replay engine will care about these messages.
 pub fn clean_json(json_event: &str) -> Option<String> {
     if let Ok(mut decoded_value) = serde_json::from_str::<Value>(json_event) {
         if let Some(request) = decoded_value.get(REQUEST).unwrap_or(&Value::Null).as_str() {
@@ -52,40 +89,4 @@ pub fn clean_json(json_event: &str) -> Option<String> {
     } else {
         None
     }
-}
-
-// try to find the json strings in the logs.
-// they could be seperated by newlines and such
-// so we have this LeetCode-ass looking solution
-// to account for that.
-pub fn process_line(processor: &mut LogProcessor, log_line: &str) -> Vec<String>{
-    let mut completed_json_strings = Vec::new();
-    for char in log_line.chars() {
-        match char {
-            '{' => {
-                if processor.current_json_str.is_none() {
-                    processor.current_json_str = Some(String::new());
-                }
-                processor.current_json_str.as_mut().unwrap().push('{');
-                processor.bracket_depth += 1;
-            }
-            '}' => {
-                if let Some(json_str) = &mut processor.current_json_str {
-                    json_str.push('}');
-                    processor.bracket_depth -= 1;
-                    if processor.bracket_depth == 0 {
-                        completed_json_strings.push(json_str.clone());
-                        processor.current_json_str = None;
-                    }
-                }
-            }
-            ' ' | '\n' | '\r' => {}
-            _ => {
-                if let Some(json_str) = &mut processor.current_json_str {
-                    json_str.push(char);
-                }
-            }
-        }
-    }
-    completed_json_strings
 }

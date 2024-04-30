@@ -1,4 +1,5 @@
 target/
 .idea/
 data/
+match_replays/
 output.json

@@ -4,6 +4,14 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+
+///
+/// GRE refers to the server-side MTGA engine
+///
+/// no clue what it actually stands for, but these are a bunch of events that come from
+/// the server to the game client
+///
+
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestTypeGREToClientEvent {
@@ -80,6 +88,8 @@ pub enum GREToClientMessage {
     GroupReq(GroupReqWrapper),
     #[serde(rename = "GREMessageType_GroupResp")]
     GroupRespWrapper(GroupRespWrapper),
+    #[serde(rename = "GREMessageType_TimeoutMessage")]
+    TimeoutMessage(TimeoutMessageWrapper),
     #[default]
     Default,
 }
@@ -92,6 +102,15 @@ pub struct GreMeta {
     #[serde(default)]
     pub system_seat_ids: Vec<i32>,
     pub game_state_id: Option<i32>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeoutMessageWrapper {
+    #[serde(flatten)]
+    pub meta: GreMeta,
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -357,6 +376,7 @@ pub struct SelectNReq {
     pub max_sel: i32,
     #[serde(default)]
     pub max_weight: i32,
+    #[serde(default)]
     pub min_sel: i32,
     #[serde(default)]
     pub min_weight: i32,
@@ -419,6 +439,7 @@ pub struct SetSettingsResp {
 pub struct MulliganReq {
     #[serde(default)]
     pub mulligan_count: i32,
+    #[serde(default)]
     #[serde(rename = "mulliganType")]
     pub type_field: MulliganType
 }
@@ -444,6 +465,7 @@ pub struct Parameter {
     pub parameter_name: String,
     pub reference: Option<Reference>,
     pub prompt_id: Option<i32>,
+    #[serde(default)]
     #[serde(rename = "type")]
     pub type_field: String,
     pub number_value: Option<i32>,
@@ -454,6 +476,7 @@ pub struct Parameter {
 pub struct Reference {
     pub id: i32,
     #[serde(rename = "type")]
+    #[serde(default)]
     pub type_field: String,
 }
 
@@ -466,6 +489,7 @@ pub struct ConnectResp {
     pub grp_version: GrpVersion,
     pub proto_ver: String,
     pub settings: Settings,
+    #[serde(default)]
     pub skins: Vec<Skin>,
     pub status: String,
 }
@@ -552,6 +576,7 @@ pub struct GameStateMessage {
     pub prev_game_state_id: Option<i32>,
     #[serde(default)]
     pub timers: Vec<Timer>,
+    #[serde(default)]
     #[serde(rename = "type")]
     pub type_field: String,
     pub update: String,
@@ -660,6 +685,7 @@ pub struct Annotation {
     pub affected_ids: Vec<i32>,
     pub affector_id: Option<i32>,
     pub id: i32,
+    #[serde(default)]
     #[serde(rename = "type")]
     pub type_field: Vec<AnnotationType>,
     #[serde(default)]
@@ -672,6 +698,8 @@ pub enum AnnotationType {
     ResolutionStart,
     #[serde(rename = "AnnotationType_ResolutionComplete")]
     ResolutionComplete,
+    #[serde(rename = "AnnotationType_CardRevealed")]
+    CardRevealed,
     #[serde(rename = "AnnotationType_RevealedCardCreated")]
     RevealedCardCreated,
     #[serde(rename = "AnnotationType_RevealedCardDeleted")]
@@ -684,6 +712,8 @@ pub enum AnnotationType {
     SyntheticEvent,
     #[serde(rename = "AnnotationType_ModifiedLife")]
     ModifiedLife,
+    #[serde(rename = "AnnotationType_ModifiedType")]
+    ModifiedType,
     #[serde(rename = "AnnotationType_EnteredZoneThisTurn")]
     EnteredZoneThisTurn,
     #[serde(rename = "AnnotationType_PhaseOrStepModified")]
@@ -692,14 +722,75 @@ pub enum AnnotationType {
     NewTurnStarted,
     #[serde(rename = "AnnotationType_UserActionTaken")]
     UserActionTaken,
-    #[serde(other)]
-    Unknown,
+    #[serde(rename = "AnnotationType_AbilityInstanceCreated")]
+    AbilityInstanceCreated,
+    #[serde(rename = "AnnotationType_AbilityInstanceDeleted")]
+    AbilityInstanceDeleted,
+    #[serde(rename = "AnnotationType_PlayerSelectingTargets")]
+    PlayerSelectingTargets,
+    #[serde(rename = "AnnotationType_PlayerSubmittedTargets")]
+    PlayerSubmittedTargets,
+    #[serde(rename = "AnnotationType_TappedUntappedPermanent")]
+    TappedUntappedPermanent,
+    #[serde(rename = "AnnotationType_Designation")]
+    Designation,
+    #[serde(rename = "AnnotationType_GainDesignation")]
+    GainDesignation,
+    #[serde(rename = "AnnotationType_ChoiceResult")]
+    ChoiceResult,
+    #[serde(rename = "AnnotationType_ReplacementEffect")]
+    ReplacementEffect,
+    #[serde(rename = "AnnotationType_ObjectsSelected")]
+    ObjectsSelected,
+    #[serde(rename = "AnnotationType_Counter")]
+    Counter,
+    #[serde(rename = "AnnotationType_CounterAdded")]
+    CounterAdded,
+    #[serde(rename = "AnnotationType_CounterRemoved")]
+    CounterRemoved,
+    #[serde(rename = "AnnotationType_MultistepEffectStarted")]
+    MultistepEffectStarted,
+    #[serde(rename = "AnnotationType_MultistepEffectComplete")]
+    MultistepEffectComplete,
+    #[serde(rename = "AnnotationType_LayeredEffect")]
+    LayeredEffect,
+    #[serde(rename = "AnnotationType_LayeredEffectCreated")]
+    LayeredEffectCreated,
+    #[serde(rename = "AnnotationType_LayeredEffectDeleted")]
+    LayeredEffectDeleted,
+    #[serde(rename = "AnnotationType_LayeredEffectDestroyed")]
+    LayeredEffectDestroyed,
+    #[serde(rename = "AnnotationType_DamageDealt")]
+    DamageDealt,
+    #[serde(rename = "AnnotationType_TargetSpec")]
+    TargetSpec,
+    #[serde(rename = "AnnotationType_ManaPaid")]
+    ManaPaid,
+    #[serde(rename = "AnnotationType_TriggeringObject")]
+    TriggeringObject,
+    #[serde(rename = "AnnotationType_LinkInfo")]
+    LinkInfo,
+    #[serde(rename = "AnnotationType_ShouldntPlay")]
+    ShouldntPlay,
+    #[serde(rename = "AnnotationType_ModifiedToughness")]
+    ModifiedToughness,
+    #[serde(rename = "AnnotationType_ModifiedPower")]
+    ModifiedPower,
+    #[serde(rename = "AnnotationType_PowerToughnessModCreated")]
+    PowerToughnessModCreated,
+    #[serde(rename = "AnnotationType_Qualification")]
+    Qualification,
+    #[serde(rename = "AnnotationType_CrewedThisTurn")]
+    CrewedThisTurn,
+    #[serde(rename = "AnnotationType_DamagedThisTurn")]
+    DamagedThisTurn,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AnnotationDetail {
     pub key: String,
+    #[serde(default)]
     #[serde(rename = "type")]
     pub type_field: String,
     #[serde(default)]
@@ -723,6 +814,7 @@ pub struct GameObject {
     pub name: Option<i32>,
     pub overlay_grp_id: Option<i32>,
     pub owner_seat_id: i32,
+    #[serde(default)]
     #[serde(rename = "type")]
     pub type_field: GameObjectType,
     #[serde(default)]
@@ -755,6 +847,8 @@ pub enum GameObjectType {
     Ability,
     #[serde(rename = "GameObjectType_Token")]
     Token,
+    #[serde(rename = "GameObjectType_Adventure")]
+    Adventure,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -823,6 +917,7 @@ pub struct Timer {
     pub behavior: String,
     pub duration_sec: i32,
     pub timer_id: i32,
+    #[serde(default)]
     #[serde(rename = "type")]
     pub type_field: String,
     pub warning_threshold_sec: Option<i32>,
@@ -847,6 +942,7 @@ pub struct TurnInfo {
 pub struct Zone {
     pub owner_seat_id: Option<i32>,
     #[serde(rename = "type")]
+    #[serde(default)]
     pub type_field: ZoneType,
     pub visibility: Visibility,
     pub zone_id: i32,

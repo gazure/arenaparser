@@ -1,13 +1,20 @@
 use serde::{Deserialize, Serialize};
 
+
+///
+/// Every match should emit 2 of these logs to indicate the start and end of a match
+/// though the start of a match is usually after the ConnectResp GRE message with the
+/// player's decklist, so something keep in mind
+///
+
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RequestTypeMGRSCEvent {
     #[serde(rename = "matchGameRoomStateChangedEvent")]
-    pub match_game_room_state_changed_event: MatchGameRoomStateChangedEvent,
-    #[serde(rename = "requestId")]
+    pub mgrsc_event: MatchGameRoomStateChangedEvent,
+    #[serde(default)]
     pub request_id: i32,
     pub timestamp: String,
-    #[serde(rename = "transactionId")]
     pub transaction_id: String,
 }
 
@@ -28,18 +35,13 @@ pub struct GameRoomInfo {
     pub state_type: StateType,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub enum StateType {
     #[serde(rename = "MatchGameRoomStateType_MatchCompleted")]
     MatchCompleted,
+    #[default]
     #[serde(rename = "MatchGameRoomStateType_Playing")]
     Playing,
-}
-
-impl Default for StateType {
-    fn default() -> Self {
-        StateType::Playing
-    }
 }
 
 

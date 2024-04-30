@@ -1,13 +1,14 @@
 pub mod mtga_events;
 pub mod arena_event_parser;
+pub mod replay;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::fs::File;
 use std::io::BufReader;
 use lazy_static::lazy_static;
 use serde_json::Value;
 use crate::mtga_events::gre::{Annotation, GameObject, MulliganType, TurnInfo, Zone};
-use crate::mtga_events::mgrc_event::{Player, ResultList};
+use crate::mtga_events::mgrsc::{Player, ResultList};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MatchEvent {
@@ -42,7 +43,7 @@ pub enum MatchEvent {
 }
 
 lazy_static! {
-    pub(crate) static ref CARDS_DB: CardsDatabase = CardsDatabase::new();
+    pub(crate) static ref CARDS_DB: CardsDatabase = CardsDatabase::new().unwrap();
 }
 
 #[derive(Debug)]
@@ -51,14 +52,14 @@ pub struct CardsDatabase {
 }
 
 impl CardsDatabase {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         let cards_db_path = "data/cards.json";
-        let cards_db_file = File::open(cards_db_path).unwrap();
+        let cards_db_file = File::open(cards_db_path)?;
         let cards_db_reader = BufReader::new(cards_db_file);
-        let cards_db: Value = serde_json::from_reader(cards_db_reader).unwrap();
-        let cards_db = cards_db.get("cards").unwrap().clone();
+        let cards_db: Value = serde_json::from_reader(cards_db_reader)?;
+        let cards_db = cards_db.get("cards").ok_or(anyhow!("Cards not found"))?.clone();
 
-        Self { db: cards_db }
+        Ok(Self { db: cards_db })
     }
 
     pub fn get_pretty_name(&self, grp_id: &str) -> Result<String> {

@@ -3,6 +3,10 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+///
+/// Client messages to the game server
+///
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RequestTypeClientToMatchServiceMessage {
     #[serde(rename = "clientToMatchServiceMessageType")]
@@ -20,7 +24,7 @@ pub struct RequestTypeClientToMatchServiceMessage {
 #[serde(tag = "type")]
 pub enum ClientMessage {
     #[serde(rename = "ClientMessageType_ChooseStartingPlayerResp")]
-    ChooseStartingPlayerResp(ChooseStartingPlayerResp),
+    ChooseStartingPlayerResp(ChooseStartingPlayerRespWrapper),
     #[serde(rename = "ClientMessageType_SubmitDeckResp")]
     SubmitDeckResp(SubmitDeckResp),
     #[serde(rename = "ClientMessageType_SetSettingsReq")]
@@ -136,9 +140,20 @@ pub struct SubmitDeckResp {
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ChooseStartingPlayerRespWrapper {
+    pub choose_starting_player_resp: ChooseStartingPlayerResp,
+    #[serde(default)]
+    pub game_state_id: i32,
+    #[serde(default)]
+    pub resp_id: i32,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChooseStartingPlayerResp {
     #[serde(default)]
     pub system_seat_id: i32,
+    #[serde(rename = "teamId")]
     pub team_id: i32,
     pub team_type: String,
 }
