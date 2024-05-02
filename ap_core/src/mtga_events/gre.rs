@@ -1,5 +1,6 @@
 
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -682,6 +683,7 @@ pub struct Target {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Annotation {
+    #[serde(default)]
     pub affected_ids: Vec<i32>,
     pub affector_id: Option<i32>,
     pub id: i32,
@@ -784,6 +786,30 @@ pub enum AnnotationType {
     CrewedThisTurn,
     #[serde(rename = "AnnotationType_DamagedThisTurn")]
     DamagedThisTurn,
+    #[serde(rename = "AnnotationType_LoyaltyActivationsRemaining")]
+    LoyaltyActivationsRemaining,
+    #[serde(rename = "AnnotationType_TokenCreated")]
+    TokenCreated,
+    #[serde(rename = "AnnotationType_TokenDeleted")]
+    TokenDeleted,
+    #[serde(rename = "AnnotationType_ManaDetails")]
+    ManaDetails,
+    #[serde(rename = "AnnotationType_Shuffle")]
+    Shuffle,
+    #[serde(rename = "AnnotationType_InstanceRevealedToOpponent")]
+    InstanceRevealedToOpponent,
+    #[serde(rename = "AnnotationType_DisqualifiedEffect")]
+    DisqualifiedEffect,
+    #[serde(rename = "AnnotationType_CastingTimeOption")]
+    CastingTimeOption,
+    #[serde(rename = "AnnotationType_AddAbility")]
+    AddAbility,
+    #[serde(rename = "AnnotationType_AbilityWordActive")]
+    AbilityWordActive,
+    #[serde(rename = "AnnotationType_ModifiedColor")]
+    ModifiedColor,
+    #[serde(rename = "AnnotationType_LossOfGame")]
+    LossOfGame,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -931,11 +957,65 @@ pub struct TurnInfo {
     pub decision_player: Option<i32>,
     pub next_phase: Option<String>,
     pub next_step: Option<String>,
-    pub phase: Option<String>,
+    pub phase: Option<Phase>,
     pub priority_player: Option<i32>,
     pub turn_number: Option<i32>,
-    pub step: Option<String>,
+    pub step: Option<Step>,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum Phase {
+    #[serde(rename = "Phase_Beginning")]
+    Beginning,
+    #[serde(rename = "Phase_Main1")]
+    PrecombatMain,
+    #[serde(rename = "Phase_Combat")]
+    Combat,
+    #[serde(rename = "Phase_Main2")]
+    PostcombatMain,
+    #[serde(rename = "Phase_Ending")]
+    End,
+}
+
+impl Display for Phase {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum Step {
+    #[serde(rename = "Step_Untap")]
+    Untap,
+    #[serde(rename = "Step_Upkeep")]
+    Upkeep,
+    #[serde(rename = "Step_Draw")]
+    Draw,
+    #[serde(rename = "Step_BeginCombat")]
+    BeginCombat,
+    #[serde(rename = "Step_DeclareAttack")]
+    DeclareAttack,
+    #[serde(rename = "Step_DeclareBlock")]
+    DeclareBlock,
+    #[serde(rename = "Step_FirstStrikeDamage")]
+    FirstStrikeDamage,
+    #[serde(rename = "Step_CombatDamage")]
+    CombatDamage,
+    #[serde(rename = "Step_EndCombat")]
+    EndCombat,
+    #[serde(rename = "Step_End")]
+    End,
+    #[serde(rename = "Step_Cleanup")]
+    Cleanup,
+}
+
+impl Display for Step {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -952,7 +1032,7 @@ pub struct Zone {
     pub object_instance_ids: Vec<i32>,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Visibility {
     #[default]
     #[serde(rename = "Visibility_Public")]
@@ -963,7 +1043,7 @@ pub enum Visibility {
     Hidden,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ZoneType {
     #[default]
     #[serde(rename = "ZoneType_Battlefield")]
@@ -1028,6 +1108,12 @@ pub enum ZoneType {
     Player,
     #[serde(rename = "ZoneType_RevealedPlayerZone")]
     RevealedPlayerZone,
+}
+
+impl Display for ZoneType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

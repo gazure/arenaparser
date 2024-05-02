@@ -1,10 +1,11 @@
 #![allow(unused)]
-use std::collections::BTreeMap;
+use ap_core::mtga_events::gre::{Phase, Step};
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use anyhow::Result;
-use bevy::prelude::*;
 use bevy::input::ButtonInput;
+use bevy::prelude::*;
 use clap::Parser;
 
 use ap_core::mtga_events::client::ClientMessage;
@@ -34,13 +35,16 @@ pub struct Owner(i32);
 pub struct Tapped;
 
 #[derive(Debug, Component)]
+pub struct LifeTotal(i32);
+
+#[derive(Debug, Component)]
 pub struct Instance(i32);
 
 #[derive(Debug, Component)]
 pub struct ZoneInfo {
     pub id: i32,
-    pub owner_id: i32,
-    pub default_visibility: Visibility,
+    pub owner_id: Option<i32>,
+    pub default_visibility: ap_core::mtga_events::gre::Visibility,
     pub type_field: ZoneType,
 }
 
@@ -81,6 +85,18 @@ struct Team(i32);
 #[derive(Debug, Component)]
 struct PlayerComp(String);
 
+#[derive(Debug, Component)]
+struct TurnInfo;
+
+impl MatchLogEvents {
+    fn get_player_name(&self, seat_id: i32) -> String {
+        self.players
+            .get(&seat_id)
+            .map(|player| player.player_name.clone())
+            .unwrap_or("Unknown".to_string())
+    }
+}
+
 impl Default for MatchLogEvents {
     fn default() -> Self {
         Self {
@@ -97,9 +113,60 @@ impl Default for MatchLogEvents {
     }
 }
 
-fn the_update_system(input: Res<ButtonInput<KeyCode>>, db: Res<CardsDB>, mut commands: Commands, mut mle: ResMut<MatchLogEvents>, ie_query: Query<(Entity, &Instance)>) {
+fn the_update_system(
+    input: Res<ButtonInput<KeyCode>>,
+    db: Res<CardsDB>,
+    mut commands: Commands,
+    mut mle: ResMut<MatchLogEvents>,
+    ie_query: Query<(Entity, &Instance)>,
+    zone_info_query: Query<(&ZoneInfo)>,
+    mut turn_info_query: Query<(&mut Text), (With<TurnInfo>, Without<PlayerComp>)>,
+    mut players_life_total_query: Query<
+        (&mut Text, &mut LifeTotal, &Team),
+        (With<PlayerComp>, Without<TurnInfo>),
+    >,
+) {
     if input.just_pressed(KeyCode::Space) {
-        if let Some(gsm) = mle.game_state_messages.get(mle.game_state_message_idx) {
+        let mle = mle.into_inner();
+        while let Some(gsm) = mle.game_state_messages.get(mle.game_state_message_idx) {
+            mle.game_state_message_idx += 1;
+            // Always update the turn info if applicable
+            if let Some(ti) = &gsm.turn_info {
+                for mut turn_info_text in turn_info_query.iter_mut() {
+                    if let Some(active) = ti.active_player {
+                        let player_name = mle.get_player_name(active);
+                        turn_info_text.sections[0].value = player_name;
+                    }
+                    if let Some(turn_num) = ti.turn_number {
+                        let turn_number = turn_num / 2 + turn_num % 2;
+                        turn_info_text.sections[2].value = turn_number.to_string();
+                    }
+                    if let Some(phase) = ti.phase {
+                        turn_info_text.sections[4].value = phase.to_string();
+                    }
+                    turn_info_text.sections[6].value = if let Some(step) = ti.step {
+                         step.to_string()
+                    } else {
+                        "".to_string()
+                    }
+                }
+            }
+            if gsm.players.is_empty() && gsm.game_objects.is_empty() && gsm.zones.is_empty() {
+                info!("Advanced Game State Message Index to {}, GameStateId: {}  -- no new zones or game objects", mle.game_state_message_idx, gsm.game_state_id);
+                continue;
+            }
+
+            let game_state_id = gsm.game_state_id;
+            for player in &gsm.players {
+                if let Some((mut text, mut life_total, team)) = players_life_total_query
+                    .iter_mut()
+                    .find(|(_, _, team_id)| team_id.0 == player.team_id)
+                {
+                    life_total.0 = player.life_total;
+                    text.sections[1].value = life_total.0.to_string();
+                }
+            }
+
             for deleted_instance_id in &gsm.diff_deleted_instance_ids {
                 for (entity, instance) in ie_query.iter() {
                     if instance.0 == *deleted_instance_id {
@@ -107,7 +174,7 @@ fn the_update_system(input: Res<ButtonInput<KeyCode>>, db: Res<CardsDB>, mut com
                     }
                 }
             }
-            let mut new_instance_ids = Vec::<i32>::new();
+            let mut new_instances = BTreeMap::new();
 
             for go in &gsm.game_objects {
                 let mut go_entity = None;
@@ -117,117 +184,238 @@ fn the_update_system(input: Res<ButtonInput<KeyCode>>, db: Res<CardsDB>, mut com
                         break;
                     }
                 }
-                let entity = match go_entity {
-                    Some(entity) => {
-                        let mut e_commands = commands.entity(entity);
-                        match go.zone_id {
-                            Some(zone_id) => {
-                                e_commands.insert(Zone(zone_id));
-                            }
-                            None => {
-                                e_commands.remove::<Zone>();
-                            }
-                        }
-                        e_commands.insert(Owner(go.owner_seat_id));
-                        e_commands.insert(GRP{id: go.grp_id, name: db.0.get_pretty_name_defaulted(&go.grp_id.to_string())});
-                        match go.is_tapped {
-                            Some(true) => {
-                                e_commands.insert(Tapped);
-                            }
-                            _ => {
-                                e_commands.remove::<Tapped>();
-                            }
-                        }
-                        entity
-                    },
-                    None => {
-                        let entity_id = commands.spawn((Instance(go.instance_id), Owner(go.owner_seat_id), GRP{id: go.grp_id, name: db.0.get_pretty_name_defaulted(&go.grp_id.to_string())})).id();
-                        let mut e_commands = commands.entity(entity_id);
-                        match go.zone_id {
-                            Some(zone_id) => {
-                                e_commands.insert(Zone(zone_id));
-                            }
-                            None => {
-                                e_commands.remove::<Zone>();
-                            }
-                        }
-                        match go.is_tapped {
-                            Some(true) => {
-                                e_commands.insert(Tapped);
-                            }
-                            _ => {
-                                e_commands.remove::<Tapped>();
-                            }
-                        }
-                        entity_id
+                let entity = go_entity.unwrap_or_else(|| {
+                    let id = commands.spawn((Instance(go.instance_id),)).id();
+                    new_instances.insert(go.instance_id, id);
+                    id
+                });
+                let mut e_commands = commands.entity(entity);
+                e_commands.insert(GRP {
+                    id: go.grp_id,
+                    name: db.0.get_pretty_name_defaulted(&go.grp_id.to_string()),
+                });
+                e_commands.insert(Owner(go.owner_seat_id));
+                match go.is_tapped {
+                    Some(true) => {
+                        e_commands.insert(Tapped);
                     }
-                };
-                for zone in &gsm.zones {
-                    for instance_id in &zone.object_instance_ids {
-                        let mut found_entity = false;
-                        for (entity, instance) in ie_query.iter() {
-                            if instance.0 == *instance_id {
-                                commands.entity(entity).insert(Zone(zone.zone_id));
-                                found_entity = true;
-                                break;
-                            }
-                        }
-                        if !found_entity {
-                            commands.spawn((Instance(*instance_id), Zone(zone.zone_id)));
-                        }
+                    _ => {
+                        e_commands.remove::<Tapped>();
                     }
                 }
             }
-            mle.game_state_message_idx += 1;
-            info!("Advanced Game State Message Index to {}", mle.game_state_message_idx);
+            for zone in &gsm.zones {
+                for instance_id in &zone.object_instance_ids {
+                    let mut entity = match new_instances.get(instance_id) {
+                        Some(entity) => *entity,
+                        None => ie_query
+                            .iter()
+                            .find(|(_, instance)| instance.0 == *instance_id)
+                            .map(|(entity, _)| entity)
+                            .unwrap_or_else(|| {
+                                commands.spawn((Instance(*instance_id),)).id()
+                            })
+                    };
+                    commands.entity(entity).insert(Zone(zone.zone_id));
+                }
+                if let None = zone_info_query
+                    .iter()
+                    .find(|zone_info| zone_info.id == zone.zone_id)
+                {
+                    // TODO: From/Into?
+                    commands.spawn((ZoneInfo {
+                        id: zone.zone_id,
+                        owner_id: zone.owner_seat_id,
+                        default_visibility: zone.visibility,
+                        type_field: zone.type_field,
+                    },));
+                }
+            }
+            info!(
+                "Advanced Game State Message Index to {}, GameStateId: {}",
+                mle.game_state_message_idx, game_state_id
+            );
+            break;
         }
     }
 }
 
-fn the_echo_system(input: Res<ButtonInput<KeyCode>>, mle: Res<MatchLogEvents>, query: Query<(&Instance, &Zone, Option<&GRP>)>) {
+fn the_echo_system(
+    input: Res<ButtonInput<KeyCode>>,
+    mle: Res<MatchLogEvents>,
+    db: Res<CardsDB>,
+    query: Query<(&Instance, &Zone, Option<&GRP>)>,
+    zones: Query<(&ZoneInfo)>,
+) {
     if input.just_pressed(KeyCode::KeyF) {
-        let mut zone_to_igrp = BTreeMap::<i32, Vec<i32>>::new();
+        let mut zone_to_instances = BTreeMap::<i32, Vec<i32>>::new();
+        let mut instance_to_grp = BTreeMap::<i32, String>::new();
         for (instance, zone, grp) in query.iter() {
-            info!("Instance: {}, Zone: {}, GRP: {:?}", instance.0, zone.0, grp);
+            let zone_id = zone.0;
+            zone_to_instances
+                .entry(zone_id)
+                .or_insert_with(Vec::new)
+                .push(instance.0);
+            if let Some(grp) = grp {
+                instance_to_grp.insert(instance.0, grp.name.clone());
+            }
+        }
+
+        for (zone_id, instance_ids) in zone_to_instances.iter() {
+            if let Some(zone_info) = zones.iter().find(|zone_info| zone_info.id == *zone_id) {
+                let zone_name = zone_info.type_field.to_string();
+                let owner_id = zone_info
+                    .owner_id
+                    .and_then(|owner_id| {
+                        mle.players
+                            .get(&owner_id)
+                            .map(|player| player.player_name.clone())
+                    })
+                    .unwrap_or("Public".to_string());
+
+                info!("Zone {}: {} Owner: {}", zone_id, zone_name, owner_id);
+                match zone_info.type_field {
+                    ZoneType::Library | ZoneType::Limbo => {
+                        let card_count = instance_ids.len();
+                        info!("  {} cards", card_count);
+                    }
+                    _ => {
+                        for instance_id in instance_ids {
+                            let default_card_name = instance_id.to_string();
+                            let card_name = instance_to_grp
+                                .get(instance_id)
+                                .unwrap_or(&default_card_name);
+                            info!("  {} {}", card_name, instance_id);
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
 fn setup(mle: Res<MatchLogEvents>, mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
+    commands.spawn((
+        TurnInfo,
+        TextBundle::from_sections([
+            TextSection::from_style(
+                TextStyle {
+                    font_size: 30.0,
+                    ..default()
+                },
+            ),
+            TextSection::new(
+                " Turn ",
+                TextStyle {
+                    font_size: 30.0,
+                    ..default()
+                },
+            ),
+            TextSection::from_style(
+                TextStyle {
+                    font_size: 30.0,
+                    ..default()
+                },
+            ),
+            TextSection::new(
+                " ",
+                TextStyle {
+                    font_size: 30.0,
+                    ..default()
+                },
+            ),
+            TextSection::from_style(
+                TextStyle {
+                    font_size: 30.0,
+                    ..default()
+                },
+            ),
+            TextSection::new(
+                " ",
+                TextStyle {
+                    font_size: 30.0,
+                    ..default()
+                },
+            ),
+            TextSection::from_style(
+                TextStyle {
+                    font_size: 30.0,
+                    ..default()
+                },
+            ),
+        ])
+        .with_text_justify(JustifyText::Left)
+        .with_style(Style {
+            position_type: PositionType::Absolute,
+            top: Val::Percent(45.0),
+            left: Val::Px(10.0),
+            ..default()
+        }),
+    ));
+    let mut texts = Vec::new();
 
     for (team_id, player) in mle.players.iter() {
+        let default_life_total = 20;
         let style = if *team_id == mle.controller_seat_id {
             Style {
                 position_type: PositionType::Absolute,
                 bottom: Val::Px(10.0),
-                left: Val::Px(10.0),
+                align_self: AlignSelf::Center,
                 ..default()
             }
         } else {
             Style {
                 position_type: PositionType::Absolute,
                 top: Val::Px(10.0),
-                left: Val::Px(10.0),
+                align_self: AlignSelf::Center,
                 ..default()
             }
         };
-        info!("Player {} rolled a {}", player.player_name, player.die_roll_result);
+        info!(
+            "{} rolled a {}",
+            player.player_name, player.die_roll_result
+        );
 
-        commands.spawn((
+
+        let text = commands.spawn((
             PlayerComp(player.player_name.clone()),
+            LifeTotal(default_life_total),
             Team(*team_id),
-            TextBundle::from_section(
-                format!("{}", player.player_name),
-                TextStyle {
-                    font_size: 40.0,
-                    color: Color::AZURE,
-                    ..default()
-                },
-            )
+            TextBundle::from_sections([
+                TextSection::new(
+                    format!("{}: ", player.player_name),
+                    TextStyle {
+                        font_size: 40.0,
+                        ..default()
+                    },
+                ),
+                TextSection::new(
+                    default_life_total.to_string(),
+                    TextStyle {
+                        font_size: 60.0,
+                        ..default()
+                    },
+                ),
+            ])
+            .with_text_justify(JustifyText::Center)
             .with_style(style),
-        ));
+        )).id();
+        texts.push(text);
     }
+
+    let mut parent = commands.spawn(NodeBundle{
+        style: Style {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            flex_direction: FlexDirection::Column,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::FlexEnd,
+            ..default()
+        },
+        ..default()
+    });
+    parent.push_children(&texts);
 }
 
 fn main() -> Result<()> {
