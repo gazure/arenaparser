@@ -1,12 +1,10 @@
 #![allow(unused)]
 use anyhow::Result;
 
-use crate::{CardsDatabase, CARDS_DB};
-use crate::mtga_events::client::{ClientMessage, RequestTypeClientToMatchServiceMessage};
-use crate::mtga_events::gre::{GreMeta, GREToClientMessage, MulliganReq, MulliganReqWrapper, Parameter, RequestTypeGREToClientEvent};
-use crate::mtga_events::mgrsc::{
-    RequestTypeMGRSCEvent, StateType,
-};
+use crate::mtga_events::client::RequestTypeClientToMatchServiceMessage;
+use crate::mtga_events::gre::{GreMeta, GREToClientMessage, MulliganReq, MulliganReqWrapper, RequestTypeGREToClientEvent};
+use crate::mtga_events::mgrsc::RequestTypeMGRSCEvent;
+use crate::mtga_events::primitives::Parameter;
 
 pub struct ParseOutput {
     pub gre_message: Option<RequestTypeGREToClientEvent>,

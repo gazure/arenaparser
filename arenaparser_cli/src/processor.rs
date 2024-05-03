@@ -1,5 +1,3 @@
-// const REQUEST: &str = "request";
-// const PAYLOAD: &str = "Payload";
 
 #[derive(Debug)]
 pub struct LogProcessor {
@@ -52,27 +50,3 @@ impl LogProcessor {
         completed_json_strings
     }
 }
-
-// some json logs are nested and re-encoded as strings, this function will attempt to clean them up
-// addendum: I am not sure the replay engine will care about these messages.
-// pub fn clean_json(json_event: &str) -> Option<String> {
-//     if let Ok(mut decoded_value) = serde_json::from_str::<Value>(json_event) {
-//         if let Some(request) = decoded_value.get(REQUEST).unwrap_or(&Value::Null).as_str() {
-//             if let Ok(mut decoded_request) = serde_json::from_str::<Value>(request) {
-//                 if let Some(payload) = decoded_request
-//                     .get(PAYLOAD)
-//                     .unwrap_or(&Value::Null)
-//                     .as_str()
-//                 {
-//                     if let Ok(decoded_payload) = serde_json::from_str::<Value>(payload) {
-//                         decoded_request[PAYLOAD] = decoded_payload;
-//                     }
-//                 }
-//                 decoded_value[REQUEST] = decoded_request;
-//             }
-//         }
-//         Some(serde_json::to_string(&decoded_value).unwrap())
-//     } else {
-//         None
-//     }
-// }

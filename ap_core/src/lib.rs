@@ -2,23 +2,24 @@ pub mod arena_event_parser;
 pub mod mtga_events;
 pub mod replay;
 
-use crate::mtga_events::gre::{Annotation, GameObject, MulliganType, TurnInfo, Zone};
-use crate::mtga_events::mgrsc::{Player, ResultList};
+use crate::mtga_events::gre::GameObject;
+use crate::mtga_events::mgrsc::MatchPlayer;
 use anyhow::Result;
 use lazy_static::lazy_static;
 use serde_json::Value;
 use std::fs::File;
 use std::io::BufReader;
+use mtga_events::primitives::{Annotation, MulliganType, ResultListEntry, TurnInfo, Zone};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MatchEvent {
     MatchBegin {
         match_id: String,
-        players: Vec<Player>,
+        players: Vec<MatchPlayer>,
     },
     MatchComplete {
         match_id: String,
-        result_list: Vec<ResultList>,
+        result_list: Vec<ResultListEntry>,
     },
     StartingPlayerResponse(i32),
     ClientAction {

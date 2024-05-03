@@ -2,10 +2,24 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use crate::mtga_events::gre::DeckMessage;
+use crate::mtga_events::primitives::{SubZoneType, Target, ZoneType};
 
 ///
 /// Client messages to the game server
 ///
+
+macro_rules! wrapper {
+    ($wrapperName:ident, $name:ident, $snake:ident) => {
+        #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+        #[serde(rename_all = "camelCase")]
+        pub struct $wrapperName {
+            #[serde(flatten)]
+            pub meta: ClientMeta,
+            pub $snake: $name,
+        }
+    };
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RequestTypeClientToMatchServiceMessage {
@@ -20,148 +34,225 @@ pub struct RequestTypeClientToMatchServiceMessage {
     pub transaction_id: String,
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+pub struct ClientMeta {
+    pub game_state_id: Option<i32>,
+    pub resp_id: Option<i32>,
+    pub system_seat_id: Option<i32>,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "type")]
 pub enum ClientMessage {
     #[serde(rename = "ClientMessageType_ChooseStartingPlayerResp")]
     ChooseStartingPlayerResp(ChooseStartingPlayerRespWrapper),
     #[serde(rename = "ClientMessageType_SubmitDeckResp")]
-    SubmitDeckResp(SubmitDeckResp),
+    SubmitDeckResp(SubmitDeckRespWrapper),
     #[serde(rename = "ClientMessageType_SetSettingsReq")]
-    SetSettingsReq(SetSettingsReq),
+    SetSettingsReq(SetSettingsReqWrapper),
     #[serde(rename = "ClientMessageType_PerformActionResp")]
-    PerformActionResp(PerformActionResp),
+    PerformActionResp(PerformActionRespWrapper),
     #[serde(rename = "ClientMessageType_MulliganResp")]
-    MulliganResp(MulliganResp),
+    MulliganResp(MulliganRespWrapper),
     #[serde(rename = "ClientMessageType_UIMessage")]
-    UIMessage(UIMessage),
+    UIMessage(UIMessageWrapper),
     #[serde(rename = "ClientMessageType_SelectNResp")]
-    SelectNResp(SelectNResp),
+    SelectNResp(SelectNRespWrapper),
     #[serde(rename = "ClientMessageType_SubmitTargetsReq")]
-    SubmitTargetsReq(SubmitTargetsReq),
+    SubmitTargetsReq(SubmitTargetsReqWrapper),
     #[serde(rename = "ClientMessageType_SubmitTargetsResp")]
     SubmitTargetsResp(SubmitTargetsResp),
     #[serde(rename = "ClientMessageType_SelectTargetsResp")]
-    SelectTargetsResp(SelectTargetsResp),
+    SelectTargetsResp(SelectTargetsRespWrapper),
     #[serde(rename = "ClientMessageType_SubmitAttackersReq")]
     SubmitAttackersReq(SubmitAttackersReq),
     #[serde(rename = "ClientMessageType_DeclareAttackersReq")]
     DeclareAttackersReq(DeclareAttackersReq),
     #[serde(rename = "ClientMessageType_DeclareAttackersResp")]
-    DeclareAttackersResp(DeclareAttackersResp),
+    DeclareAttackersResp(DeclareAttackersRespWrapper),
     #[serde(rename = "ClientMessageType_SubmitBlockersReq")]
     SubmitBlockersReq(SubmitBlockersReq),
     #[serde(rename = "ClientMessageType_SubmitBlockersResp")]
     SubmitBlockersResp(SubmitBlockersResp),
     #[serde(rename = "ClientMessageType_DeclareBlockersResp")]
-    DeclareBlockersResp(DeclareBlockersResp),
+    DeclareBlockersResp(DeclareBlockersRespWrapper),
     #[serde(rename = "ClientMessageType_ConcedeReq")]
-    ConcedeReq(ConcedeReq),
+    ConcedeReq(ConcedeReqWrapper),
     #[serde(rename = "ClientMessageType_EffectCostResp")]
-    EffectCostResp(EffectCostResp),
+    EffectCostResp(EffectCostRespWrapper),
     #[serde(rename = "ClientMessageType_CastingTimeOptionsResp")]
-    CastingTimeOptionsResp(CastingTimeOptionsResp),
+    CastingTimeOptionsResp(CastingTimeOptionsRespWrapperWrapper),
     #[serde(rename = "ClientMessageType_CancelActionReq")]
-    CancelActionReq(CancelActionReq),
+    CancelActionReq(CancelActionReqWrapper),
     #[serde(rename = "ClientMessageType_OrderResp")]
-    OrderResp(OrderResp),
+    OrderResp(OrderRespWrapper),
     #[serde(rename = "ClientMessageType_SearchResp")]
-    SearchResp(SearchResp),
+    SearchResp(SearchRespWrapper),
     #[serde(rename = "ClientMessageType_OptionalActionResp")]
-    OptionalActionResp(OptionalActionResp),
+    OptionalActionResp(OptionalActionRespWrapper),
     #[serde(rename = "ClientMessageType_PerformAutoTapActionsResp")]
-    PerformAutoTapActionsResp(PerformAutoTapActionsResp),
+    PerformAutoTapActionsResp(PerformAutoTapActionsRespWrapper),
     #[serde(rename = "ClientMessageType_EnterSideboardingReq")]
     EnterSideboardingReq(EnterSideboardingReq),
     #[serde(rename = "ClientMessageType_GroupResp")]
-    GroupResp(GroupResp),
+    GroupResp(GroupRespWrapper),
+}
+
+wrapper!(SetSettingsReqWrapper, SetSettingsReq, set_settings_req);
+wrapper!(SubmitDeckRespWrapper, SubmitDeckResp, submit_deck_resp);
+wrapper!(MulliganRespWrapper, MulliganResp, mulligan_resp);
+wrapper!(PerformActionRespWrapper, PerformActionResp, perform_action_resp);
+wrapper!(UIMessageWrapper, UIMessage, ui_message);
+wrapper!(SelectNRespWrapper, SelectNResp, select_n_resp);
+wrapper!(SelectTargetsRespWrapper, SelectTargetsResp, select_targets_resp);
+wrapper!(DeclareAttackersRespWrapper, DeclareAttackersResp, declare_attackers_resp);
+wrapper!(ConcedeReqWrapper, ConcedeReq, concede_req);
+wrapper!(EffectCostRespWrapper, EffectCostResp, effect_cost_resp);
+wrapper!(ChooseStartingPlayerRespWrapper, ChooseStartingPlayerResp, choose_starting_player_resp);
+wrapper!(CancelActionReqWrapper, CancelActionReq, cancel_action_req);
+wrapper!(CastingTimeOptionRespWrapper, CastingTimeOptionResp, casting_time_option_resp);
+wrapper!(CastingTimeOptionsRespWrapperWrapper, CastingTimeOptionRespWrapper, casting_time_options_resp);
+wrapper!(PerformAutoTapActionsRespWrapper, PerformAutoTapActionsResp, perform_auto_tap_actions_resp);
+wrapper!(OrderRespWrapper, OrderResp, order_resp);
+wrapper!(SearchRespWrapper, SearchResp, search_resp);
+wrapper!(OptionalActionRespWrapper, OptionalActionResp, optional_resp);
+wrapper!(GroupRespWrapper, GroupResp, group_resp);
+
+
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupResp {
+    group_type: GroupType,
+    groups: Vec<Group>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-pub struct GroupResp {
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
+#[serde(rename_all = "camelCase")]
+pub struct Group {
+    #[serde(default)]
+    pub ids: Vec<i32>,
+    pub sub_zone_type: Option<SubZoneType>,
+    pub zone_type: ZoneType,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+pub enum GroupType {
+    #[default]
+    #[serde(rename="GroupType_Ordered")]
+    Ordered,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct EnterSideboardingReq {
     #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
+    pub meta: ClientMeta,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-pub struct PerformAutoTapActionsResp {
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
+pub struct PerformAutoTapActionsResp {}
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct OptionalActionResp {
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
+    response: OptionResponse,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-pub struct SearchResp {
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-pub struct OrderResp {
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-pub struct CancelActionReq {
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-pub struct CastingTimeOptionsResp {
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-pub struct SetSettingsReq {
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-pub struct SubmitDeckResp {
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
+pub enum OptionResponse {
+    #[default]
+    #[serde(rename="OptionResponse_Cancel_No")]
+    CancelNo,
+    #[serde(rename="OptionResponse_Allow_Yes")]
+    AllowYes,
 }
 
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ChooseStartingPlayerRespWrapper {
-    pub choose_starting_player_resp: ChooseStartingPlayerResp,
-    #[serde(default)]
-    pub game_state_id: i32,
-    #[serde(default)]
-    pub resp_id: i32,
+pub struct SearchResp {
+    pub items_found: Vec<i32>,
 }
+
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderResp {
+    ids: Vec<i32>,
+    ordering: OrderingType,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+pub enum OrderingType {
+    #[default]
+    #[serde(rename="OrderingType_OrderAsIndicated")]
+    OrderAsIndicated,
+}
+
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+pub struct CancelActionReq {}
+
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CastingTimeOptionResp {
+    pub casting_time_option_type: CastingTimeOptionType,
+    pub cto_id: i32,
+    pub select_n_resp: Option<SelectNResp>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+pub enum CastingTimeOptionType {
+    #[default]
+    #[serde(rename="CastingTimeOptionType_ChooseOrCost")]
+    ChooseOrCost,
+    #[serde(rename="CastingTimeOptionType_Modal")]
+    Modal,
+    #[serde(rename="CastingTimeOptionType_ChooseX")]
+    ChooseX,
+    #[serde(rename="CastingTimeOptionType_Selection")]
+    Selection
+}
+
+
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SetSettingsReq {
+    pub settings: ClientSettings
+}
+
+// TODO: settings to enum types
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientSettings {
+    pub stack_auto_pass_option: Option<String>,
+    pub auto_pass_option: Option<String>,
+    pub auto_select_replacement_setting: Option<String>,
+    pub default_auto_pass_option: Option<String>,
+    pub mana_selection_type: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SubmitDeckResp {
+    deck: DeckMessage,
+}
+
+
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChooseStartingPlayerResp {
     #[serde(default)]
     pub system_seat_id: i32,
-    #[serde(rename = "teamId")]
     pub team_id: i32,
+    // TODO: enum for team_type
     pub team_type: String,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SubmitBlockersReq {
     #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
+    pub meta: ClientMeta
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
@@ -171,27 +262,77 @@ pub struct SubmitBlockersResp {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeclareBlockersRespWrapper {
+    #[serde(flatten)]
+    pub meta: ClientMeta,
+    pub declare_blockers_resp: DeclareBlockersResp,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeclareBlockersResp {
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
+    #[serde(default)]
+    pub selected_blockers: Vec<Blocker>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Blocker {
+    #[serde(default)]
+    pub attacker_instance_ids: Vec<i32>,
+    pub blocker_instance_id: i32,
+    pub max_attackers: i32,
+    #[serde(default)]
+    pub selected_attacker_instance_ids: Vec<i32>,
+}
+
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EffectCostResp {
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
+    #[serde(default)]
+    pub cost_selection: CostSelection,
+    pub effect_cost_type: EffectCostType,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-pub struct ConcedeReq {
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
+#[serde(rename_all = "camelCase")]
+pub struct CostSelection {
+    #[serde(default)]
+    ids: Vec<i32>,
 }
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+pub enum EffectCostType {
+    #[default]
+    #[serde(rename="EffectCostType_Select")]
+    Select,
+}
+
+
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConcedeReq {
+    scope: MatchScope,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+pub enum MatchScope {
+    #[default]
+    #[serde(rename="MatchScope_Game")]
+    Game,
+    #[serde(rename="MatchScope_Match")]
+    Match,
+}
+
+
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SubmitAttackersReq {
     #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
+    pub extra: ClientMeta
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
@@ -201,21 +342,62 @@ pub struct DeclareAttackersReq {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeclareAttackersResp {
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
+    #[serde(default)]
+    pub auto_declare: bool,
+    pub auto_declare_damage_recipient: Option<DamageRecipient>,
+    #[serde(default)]
+    pub selected_attackers: Vec<Attacker>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Attacker {
+    pub attacker_instance_id: i32,
+    pub legal_damage_recipients: Vec<DamageRecipient>,
+    pub selected_damage_recipient: DamageRecipient,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DamageRecipient {
+    pub player_system_seat_id: Option<i32>,
+    pub planswalker_instance_id: Option<i32>,
+    #[serde(rename = "type")]
+    pub type_field: DamageRecType
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+pub enum DamageRecType {
+    #[default]
+    #[serde(rename="DamageRecType_Player")]
+    Player,
+    #[serde(rename="DamageRecType_PlanesWalker")]
+    Planeswalker,
+}
+
+
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SelectTargetsResp {
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
+    target: SelectTarget,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-pub struct SubmitTargetsReq {
+#[serde(rename_all = "camelCase")]
+pub struct SelectTarget {
+    pub target_idx: i32,
+    #[serde(default)]
+    pub targets: Vec<Target>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubmitTargetsReqWrapper {
     #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
+    pub meta: ClientMeta,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
@@ -224,61 +406,69 @@ pub struct SubmitTargetsResp {
     pub extra: HashMap<String, Value>,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-pub struct SelectNResp {
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-pub struct UIMessage {
-    #[serde(rename = "systemSeatId")]
+#[serde(rename_all = "camelCase")]
+pub struct SelectNResp {
     #[serde(default)]
-    pub system_seat_id: i32,
-    #[serde(rename = "uiMessage")]
-    pub ui_message: Value,
+    pub ids: Vec<i32>,
 }
+
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UIMessage {
+    seat_ids: Vec<i32>,
+    on_hover: Value,
+}
+
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct MulliganResp {
-    #[serde(rename = "gameStateId")]
-    pub game_state_id: i32,
-    #[serde(rename = "mulliganResp")]
-    pub mulligan_response: MulliganDecision,
-    #[serde(rename = "respId")]
-    pub response_id: i32,
+    pub decision: MulliganOption,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-pub struct MulliganDecision {
-    pub decision: String,
+pub enum MulliganOption {
+    #[default]
+    #[serde(rename="MulliganOption_AcceptHand")]
+    AcceptHand,
+    #[serde(rename="MulliganOption_Mulligan")]
+    Mulligan,
 }
+
+
 
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct PerformActionResp {
-    #[serde(rename = "gameStateId")]
-    pub game_state_id: i32,
-    #[serde(rename = "performActionResp")]
-    pub perform_action_response: PerformActionResponse,
-    #[serde(rename = "respId")]
-    pub response_id: i32,
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-pub struct PerformActionResponse {
-    #[serde(rename = "actions")]
     pub actions: Vec<Action>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Action {
-    #[serde(rename = "actionType")]
-    pub action_type: String,
-    #[serde(rename = "facetId")]
+    pub action_type: ActionType,
     pub facet_id: Option<i32>,
-    #[serde(rename = "grpId")]
     pub grp_id: Option<i32>,
-    #[serde(rename = "instanceId")]
     pub instance_id: Option<i32>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+pub enum ActionType {
+    #[default]
+    #[serde(rename="ActionType_Play")]
+    Play,
+    #[serde(rename="ActionType_PlayMDFC")]
+    PlayMDFC,
+    #[serde(rename="ActionType_Activate")]
+    Activate,
+    #[serde(rename="ActionType_Activate_Mana")]
+    ActivateMana,
+    #[serde(rename="ActionType_Cast")]
+    Cast,
+    #[serde(rename="ActionType_Pass")]
+    Pass,
+    #[serde(rename="ActionType_Special")]
+    Special,
 }

@@ -1,5 +1,5 @@
 #![allow(unused)]
-use ap_core::mtga_events::gre::{Phase, Step};
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
@@ -9,9 +9,10 @@ use bevy::prelude::*;
 use clap::Parser;
 
 use ap_core::mtga_events::client::ClientMessage;
-use ap_core::mtga_events::gre::{GREToClientMessage, GameObjectType, GameStateMessage, ZoneType};
+use ap_core::mtga_events::gre::{GameObjectType, GameStateMessage, GREToClientMessage};
 use ap_core::mtga_events::mgrsc::StateType;
 use ap_core::CardsDatabase;
+use ap_core::mtga_events::primitives::{Phase, Step, ZoneType};
 
 #[derive(Debug, Component)]
 pub struct Abilities(Vec<i32>);
@@ -44,7 +45,7 @@ pub struct Instance(i32);
 pub struct ZoneInfo {
     pub id: i32,
     pub owner_id: Option<i32>,
-    pub default_visibility: ap_core::mtga_events::gre::Visibility,
+    pub default_visibility: ap_core::mtga_events::primitives::Visibility,
     pub type_field: ZoneType,
 }
 
