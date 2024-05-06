@@ -21,7 +21,7 @@ macro_rules! wrapper {
     };
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RequestTypeClientToMatchServiceMessage {
     #[serde(rename = "clientToMatchServiceMessageType")]
     pub client_to_match_service_message_type: String,
@@ -35,13 +35,14 @@ pub struct RequestTypeClientToMatchServiceMessage {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClientMeta {
     pub game_state_id: Option<i32>,
     pub resp_id: Option<i32>,
     pub system_seat_id: Option<i32>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "type")]
 pub enum ClientMessage {
     #[serde(rename = "ClientMessageType_ChooseStartingPlayerResp")]

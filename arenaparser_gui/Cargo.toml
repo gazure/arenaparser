@@ -1,5 +1,5 @@
 [package]
-name = "ap_core"
+name = "arenaparser_gui"
 authors.workspace = true
 categories.workspace = true
 version.workspace = true
@@ -11,8 +11,5 @@ license.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = { workspace = true }
-lazy_static = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
-rusqlite = { workspace = true, features = ["bundled"] }
+eframe = {workspace = true, features = ["default"]}
+rfd = {workspace = true}

@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{PathBuf};
 use std::time::Duration;
 
 use anyhow::Result;
@@ -38,6 +38,8 @@ struct Args {
     player_log: PathBuf,
     #[arg(short, long, help = "directory to write replay output files")]
     output_dir: PathBuf,
+    #[arg(short, long, help = "database to write match data to")]
+    db: Option<PathBuf>,
     #[arg(short, long, action = clap::ArgAction::SetTrue, help = "wait for new events on Player.log, useful if you are actively playing MTGA")]
     follow: bool,
 }
@@ -56,10 +58,25 @@ fn main() -> Result<()> {
     let log_source = File::open(&args.player_log)?;
     let mut reader = BufReader::new(log_source);
     let mut processor = LogProcessor::new();
-    let mut match_replay_builder = MatchReplayBuilder::new(args.output_dir);
+    let mut match_replay_builder = MatchReplayBuilder::new();
     let follow = args.follow;
 
     let ctrl_c_rx = ctrl_c_channel()?;
+    let connection = if let Some(db_path) = args.db {
+        let conn = rusqlite::Connection::open(&db_path)?;
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS matches (
+                id TEXT PRIMARY KEY,
+                controller_seat_id INTEGER,
+                controller_player_name TEXT,
+                opponent_player_name TEXT
+            )",
+            (),
+        )?;
+        Some(conn)
+    } else {
+        None
+    };
 
     loop {
         select! {
@@ -73,20 +90,23 @@ fn main() -> Result<()> {
                     for json_line in json_lines {
                         let parse_output= arena_event_parser::parse(&json_line);
                         match parse_output {
-                            Ok(po) => {
-                                if let Some(mgrc_message) = po.mgrc_message {
-                                    match_replay_builder.ingest_mgrc_event(mgrc_message);
-                                }
-                                if let Some(gre_message) = po.gre_message {
-                                    match_replay_builder.gre_messages.push(gre_message);
-                                }
-                                if let Some(client_message) = po.client_message {
-                                    match_replay_builder.client_messages.push(client_message);
-                                }
+                            Ok(arena_event) => {
+                                let ingest = match_replay_builder.ingest_event(arena_event);
+                                if let Some(mut match_replay) = ingest {
+                                    let path = args.output_dir.join(format!("{}.json", match_replay.match_id));
+                                    println!("Writing match replay to file: {}", path.clone().to_str().unwrap());
+                                    if let Some(connection) = &connection {
+                                        match_replay.write_to_db(connection)?;
+                                    }
 
-
-                            },
-                            Err(e) => eprintln!("Error parsing json: {}\n{}", e, &json_line),
+                                    match_replay.write(path)?;
+                                    println!("Match replay written to file");
+                                    match_replay_builder = MatchReplayBuilder::new();
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Error parsing event: {:?}", e);
+                            }
                         }
                     }
                 }

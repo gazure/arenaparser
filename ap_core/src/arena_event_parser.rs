@@ -1,47 +1,32 @@
 #![allow(unused)]
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 use crate::mtga_events::client::RequestTypeClientToMatchServiceMessage;
 use crate::mtga_events::gre::{GreMeta, GREToClientMessage, MulliganReq, MulliganReqWrapper, RequestTypeGREToClientEvent};
 use crate::mtga_events::mgrsc::RequestTypeMGRSCEvent;
 use crate::mtga_events::primitives::Parameter;
 
-pub struct ParseOutput {
-    pub gre_message: Option<RequestTypeGREToClientEvent>,
-    pub client_message: Option<RequestTypeClientToMatchServiceMessage>,
-    pub mgrc_message: Option<RequestTypeMGRSCEvent>,
+pub enum ParseOutput {
+    GREMessage(RequestTypeGREToClientEvent),
+    ClientMessage(RequestTypeClientToMatchServiceMessage),
+    MGRSCMessage(RequestTypeMGRSCEvent),
+    NoEvent,
 }
 
 pub fn parse(event: &str) -> Result<ParseOutput> {
     if event.contains("clientToMatchServiceMessage") {
         let client_to_match_service_message: RequestTypeClientToMatchServiceMessage =
             serde_json::from_str(event)?;
-        Ok(ParseOutput {
-            gre_message: None,
-            client_message: Some(client_to_match_service_message),
-            mgrc_message: None,
-        })
+        Ok(ParseOutput::ClientMessage(client_to_match_service_message))
     } else if event.contains("matchGameRoomStateChangedEvent") {
         let mgrsc_event: RequestTypeMGRSCEvent = serde_json::from_str(event)?;
-        Ok(ParseOutput {
-            gre_message: None,
-            client_message: None,
-            mgrc_message: Some(mgrsc_event),
-        })
+        Ok(ParseOutput::MGRSCMessage(mgrsc_event))
     } else if event.contains("greToClientEvent") {
         let request_gre_to_client_event: RequestTypeGREToClientEvent =
             serde_json::from_str(event)?;
-        Ok(ParseOutput {
-            gre_message: Some(request_gre_to_client_event),
-            client_message: None,
-            mgrc_message: None,
-        })
+        Ok(ParseOutput::GREMessage(request_gre_to_client_event))
     } else {
-        Ok(ParseOutput {
-            gre_message: None,
-            client_message: None,
-            mgrc_message: None,
-        })
+        Ok(ParseOutput::NoEvent)
     }
 }
 fn process_gre_message(message: GREToClientMessage) {
@@ -85,8 +70,7 @@ fn process_gre_message(message: GREToClientMessage) {
                     [Parameter {
                         number_value: Some(cards_in_hand),
                         ..
-                    }] => {
-                    }
+                    }] => {}
                     _ => {}
                 }
             }

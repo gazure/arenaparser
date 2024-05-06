@@ -92,6 +92,8 @@ pub enum GREToClientMessage {
     GroupRespWrapper(GroupRespWrapper),
     #[serde(rename = "GREMessageType_TimeoutMessage")]
     TimeoutMessage(TimeoutMessageWrapper),
+    #[serde(rename = "GREMessageType_EdictalMessage")]
+    EdictalMessage(EdictalMessageWrapper),
     #[default]
     Default,
 }
@@ -104,6 +106,15 @@ pub struct GreMeta {
     #[serde(default)]
     pub system_seat_ids: Vec<i32>,
     pub game_state_id: Option<i32>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EdictalMessageWrapper {
+    #[serde(flatten)]
+    pub meta: GreMeta,
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -383,7 +394,7 @@ pub struct SelectNReq {
     #[serde(default)]
     pub ids: Vec<i32>,
     pub list_type: String,
-    pub max_sel: i32,
+    pub max_sel: Option<i32>,
     #[serde(default)]
     pub max_weight: i32,
     #[serde(default)]

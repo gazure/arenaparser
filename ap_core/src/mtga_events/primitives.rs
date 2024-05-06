@@ -259,12 +259,22 @@ pub enum AnnotationType {
     CastingTimeOption,
     #[serde(rename = "AnnotationType_AddAbility")]
     AddAbility,
+    #[serde(rename = "AnnotationType_RemoveAbility")]
+    RemoveAbility,
     #[serde(rename = "AnnotationType_AbilityWordActive")]
     AbilityWordActive,
     #[serde(rename = "AnnotationType_ModifiedColor")]
     ModifiedColor,
     #[serde(rename = "AnnotationType_LossOfGame")]
     LossOfGame,
+    #[serde(rename = "AnnotationType_MiscContinuousEffect")]
+    MiscContinuousEffect,
+    #[serde(rename = "AnnotationType_DisplayCardUnderCard")]
+    DisplayCardUnderCard,
+    #[serde(rename = "AnnotationType_Attachment")]
+    Attachment,
+    #[serde(rename = "AnnotationType_AttachmentCreated")]
+    AttachmentCreated,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
