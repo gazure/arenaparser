@@ -112,8 +112,8 @@ fn main() -> Result<()> {
                         let parse_output= arena_event_parser::parse(&json_line);
                         match parse_output {
                             Ok(arena_event) => {
-                                let ingest = match_replay_builder.ingest_event(arena_event);
-                                if let Some(mut match_replay) = ingest {
+                                if match_replay_builder.ingest_event(arena_event) {
+                                    let match_replay = match_replay_builder.build()?;
                                     let path = args.output_dir.join(format!("{}.json", match_replay.match_id));
                                     println!("Writing match replay to file: {}", path.clone().to_str().unwrap());
                                     if let Some(connection) = &connection {

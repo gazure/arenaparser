@@ -4,7 +4,7 @@ use crate::mtga_events::gre::{DeckMessage, GREToClientMessage, RequestTypeGREToC
 use crate::mtga_events::mgrsc::{RequestTypeMGRSCEvent, StateType};
 use anyhow::{anyhow, Result};
 use rusqlite::Connection;
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
@@ -28,44 +28,65 @@ where
     Ok(())
 }
 
-#[derive(Debug)]
-pub enum MatchIteratorItem<'a> {
-    GREMessage(&'a RequestTypeGREToClientEvent),
-    ClientMessage(&'a RequestTypeClientToMatchServiceMessage),
-    MGRSCMessage(&'a RequestTypeMGRSCEvent),
-}
-
 #[derive(Debug, Default)]
 pub struct MatchReplay {
     pub match_id: String,
-    pub mgrsc_messages: Vec<RequestTypeMGRSCEvent>,
-    pub gre_messages: Vec<RequestTypeGREToClientEvent>,
-    pub client_messages: Vec<RequestTypeClientToMatchServiceMessage>,
+    pub match_start_message: RequestTypeMGRSCEvent,
+    pub match_end_message: RequestTypeMGRSCEvent,
+    pub client_server_messages: Vec<MatchReplayEvent>,
+}
+
+#[derive(Debug, Clone)]
+pub enum MatchReplayEvent {
+    GRE(RequestTypeGREToClientEvent),
+    Client(RequestTypeClientToMatchServiceMessage),
+    MGRSC(RequestTypeMGRSCEvent),
+}
+
+pub enum MatchReplayEventRef<'a> {
+    GRE(&'a RequestTypeGREToClientEvent),
+    Client(&'a RequestTypeClientToMatchServiceMessage),
+    MGRSC(&'a RequestTypeMGRSCEvent),
+}
+
+impl<'a> Serialize for MatchReplayEventRef<'a> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> where S: Serializer {
+        match self {
+            Self::MGRSC(event) => {
+                event.serialize(serializer)
+            }
+            Self::GRE(event) => {
+                event.serialize(serializer)
+            }
+            Self::Client(event) => {
+                event.serialize(serializer)
+            }
+        }
+    }
 }
 
 impl MatchReplay {
-    pub fn write(&mut self, path: PathBuf) -> Result<()> {
+    pub fn write(&self, path: PathBuf) -> Result<()> {
         let file = File::create(path)?;
         let mut writer = BufWriter::new(file);
 
         for match_item in self.into_iter() {
-           match match_item {
-               MatchIteratorItem::MGRSCMessage(message) => {
-                   write_line(&mut writer, message)?
-               }
-               MatchIteratorItem::GREMessage(message) => {
-                   write_line(&mut writer, message)?
-               }
-               MatchIteratorItem::ClientMessage(message) => {
-                   write_line(&mut writer, message)?
-               }
-           }
+            write_line(&mut writer, &match_item)?;
         }
         Ok(())
     }
-
     fn get_controller_seat_id(&self) -> Result<i32> {
-        for gre_payload in &self.gre_messages {
+        let gre_messages = self.client_server_messages.iter().filter_map(|mre| {
+            match mre {
+                MatchReplayEvent::GRE(message) => {
+                    Some(message)
+                },
+                _ => None
+            }
+        });
+
+
+        for gre_payload in gre_messages {
             for gre_message in &gre_payload.gre_to_client_event.gre_to_client_messages {
                 match gre_message {
                     GREToClientMessage::ConnectResp(wrapper) => {
@@ -79,18 +100,16 @@ impl MatchReplay {
     }
 
     fn get_player_names(&self, seat_id: i32) -> Result<(String, String)> {
-        for mgrsc_message in &self.mgrsc_messages {
-            if let Some(players) = &mgrsc_message.mgrsc_event.game_room_info.players {
-                let controller = players
-                    .iter()
-                    .find(|player| player.system_seat_id == seat_id);
-                let opponent = players
-                    .iter()
-                    .find(|player| player.system_seat_id != seat_id);
-                if let Some(controller) = controller {
-                    if let Some(opponent) = opponent {
-                        return Ok((controller.player_name.clone(), opponent.player_name.clone()));
-                    }
+        if let Some(players) = &self.match_start_message.mgrsc_event.game_room_info.players {
+            let controller = players
+                .iter()
+                .find(|player| player.system_seat_id == seat_id);
+            let opponent = players
+                .iter()
+                .find(|player| player.system_seat_id != seat_id);
+            if let Some(controller) = controller {
+                if let Some(opponent) = opponent {
+                    return Ok((controller.player_name.clone(), opponent.player_name.clone()));
                 }
             }
         }
@@ -98,7 +117,15 @@ impl MatchReplay {
     }
 
     fn get_initial_decklist(&self) -> Result<DeckMessage> {
-        for gre_payload in &self.gre_messages {
+        let gre_messages = self.client_server_messages.iter().filter_map(|mre| {
+            match mre {
+                MatchReplayEvent::GRE(message) => {
+                    Some(message)
+                },
+                _ => None
+            }
+        });
+        for gre_payload in gre_messages {
             for gre_message in &gre_payload.gre_to_client_event.gre_to_client_messages {
                 match gre_message {
                     GREToClientMessage::ConnectResp(wrapper) => {
@@ -112,8 +139,16 @@ impl MatchReplay {
     }
 
     fn get_sideboarded_decklists(&self) -> Vec<DeckMessage> {
+        let client_messages = self.client_server_messages.iter().filter_map(|mre| {
+            match mre {
+                MatchReplayEvent::Client(message) => {
+                    Some(message)
+                }
+                _ => None
+            }
+        });
         let mut decklists = Vec::new();
-        for message in &self.client_messages {
+        for message in client_messages {
             match &message.payload {
                 ClientMessage::SubmitDeckResp(submit_deck_resp) => {
                     decklists.push(submit_deck_resp.submit_deck_resp.deck.clone());
@@ -157,53 +192,37 @@ impl MatchReplay {
 }
 
 impl<'a> IntoIterator for &'a MatchReplay {
-    type Item = MatchIteratorItem<'a>;
-    type IntoIter = IntoIter<MatchIteratorItem<'a>>;
+    type Item = MatchReplayEventRef<'a>;
+    type IntoIter = IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
         let mut events = Vec::new();
-        events.push(MatchIteratorItem::MGRSCMessage(&self.mgrsc_messages[0]));
-
-        let mut gre_iter = self.gre_messages.iter().peekable();
-        let mut client_iter = self.client_messages.iter().peekable();
-
-        loop {
-            match (gre_iter.peek(), client_iter.peek()) {
-                (None, None) => {
-                    break;
+        events.push(MatchReplayEventRef::MGRSC(&self.match_start_message));
+        self.client_server_messages.iter().for_each(|mre| {
+            let mre_ref  = match mre {
+                MatchReplayEvent::GRE(event) => {
+                    MatchReplayEventRef::GRE(event)
                 }
-                (Some(_), None) => {
-                    events.push(MatchIteratorItem::GREMessage(gre_iter.next().unwrap()));
+                MatchReplayEvent::Client(event) => {
+                    MatchReplayEventRef::Client(event)
                 }
-                (None, Some(_)) => {
-                    events.push(MatchIteratorItem::ClientMessage(client_iter.next().unwrap()));
+                MatchReplayEvent::MGRSC(event) => {
+                    MatchReplayEventRef::MGRSC(event)
                 }
-                (Some(gre), Some(client)) => {
-                    if let Some(gre_request_id) = gre.request_id {
-                        if gre_request_id <= client.request_id {
-                            events.push(MatchIteratorItem::GREMessage(gre_iter.next().unwrap()));
-                        } else {
-                            events.push(MatchIteratorItem::ClientMessage(client_iter.next().unwrap()))
-                        }
-                    } else {
-                        let _ = gre_iter.next().unwrap();
-                    }
-                }
-            }
-        }
-        events.push(MatchIteratorItem::MGRSCMessage(&self.mgrsc_messages[1]));
+            };
+            events.push(mre_ref);
+        });
+        events.push(MatchReplayEventRef::MGRSC(&self.match_end_message));
         events.into_iter()
     }
 }
 
-
-
 #[derive(Debug, Default)]
 pub struct MatchReplayBuilder {
     pub match_id: String,
-    pub mgrsc_messages: Vec<RequestTypeMGRSCEvent>,
-    pub gre_messages: Vec<RequestTypeGREToClientEvent>,
-    pub client_messages: Vec<RequestTypeClientToMatchServiceMessage>,
+    pub match_start_message: RequestTypeMGRSCEvent,
+    pub match_end_message: RequestTypeMGRSCEvent,
+    pub client_server_messages: Vec<MatchReplayEvent>
 }
 
 impl MatchReplayBuilder {
@@ -213,32 +232,24 @@ impl MatchReplayBuilder {
         }
     }
 
-    pub fn ingest_event(&mut self, event: ParseOutput) -> Option<MatchReplay> {
+    pub fn ingest_event(&mut self, event: ParseOutput) -> bool {
         match event {
-            ParseOutput::GREMessage(gre_message) => self.ingest_gre_message(gre_message),
+            ParseOutput::GREMessage(gre_message) => {
+                self.client_server_messages.push(MatchReplayEvent::GRE(gre_message))
+            },
             ParseOutput::ClientMessage(client_message) => {
-                self.ingest_client_message(client_message)
+                self.client_server_messages.push(MatchReplayEvent::Client(client_message))
             }
             ParseOutput::MGRSCMessage(mgrsc_event) => {
                 return self.ingest_mgrc_event(mgrsc_event);
             }
             ParseOutput::NoEvent => {}
         }
-        None
+        false
     }
 
-    pub fn ingest_gre_message(&mut self, gre_message: RequestTypeGREToClientEvent) {
-        self.gre_messages.push(gre_message);
-    }
 
-    pub fn ingest_client_message(
-        &mut self,
-        client_message: RequestTypeClientToMatchServiceMessage,
-    ) {
-        self.client_messages.push(client_message);
-    }
-
-    pub fn ingest_mgrc_event(&mut self, mgrsc_event: RequestTypeMGRSCEvent) -> Option<MatchReplay> {
+    pub fn ingest_mgrc_event(&mut self, mgrsc_event: RequestTypeMGRSCEvent) -> bool {
         let state_type = mgrsc_event.mgrsc_event.game_room_info.state_type.clone();
         let match_id = mgrsc_event
             .mgrsc_event
@@ -246,29 +257,29 @@ impl MatchReplayBuilder {
             .game_room_config
             .match_id
             .clone();
-        self.mgrsc_messages.push(mgrsc_event);
         match state_type {
             StateType::MatchCompleted => {
                 // match is over
-                // write match replay to file
-                // reset match replay builder
-                self.build()
+                self.match_end_message = mgrsc_event;
+                return true;
             }
             StateType::Playing => {
                 println!("found match: {}", match_id);
                 self.match_id = match_id;
-                None
+                self.match_start_message = mgrsc_event;
             }
         }
+        false
     }
 
-    pub fn build(&mut self) -> Option<MatchReplay> {
+    pub fn build(self) -> Result<MatchReplay> {
+        // TODO: add some Err states to this
         let match_replay = MatchReplay {
-            match_id: self.match_id.clone(),
-            mgrsc_messages: self.mgrsc_messages.clone(),
-            gre_messages: self.gre_messages.clone(),
-            client_messages: self.client_messages.clone(),
+            match_id: self.match_id,
+            match_start_message: self.match_start_message,
+            match_end_message: self.match_end_message,
+            client_server_messages: self.client_server_messages,
         };
-        Some(match_replay)
+        Ok(match_replay)
     }
 }
