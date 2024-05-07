@@ -6,12 +6,14 @@ use crate::mtga_events::gre::{GreMeta, GREToClientMessage, MulliganReq, Mulligan
 use crate::mtga_events::mgrsc::RequestTypeMGRSCEvent;
 use crate::mtga_events::primitives::Parameter;
 
+#[derive(Debug)]
 pub enum ParseOutput {
     GREMessage(RequestTypeGREToClientEvent),
     ClientMessage(RequestTypeClientToMatchServiceMessage),
     MGRSCMessage(RequestTypeMGRSCEvent),
     NoEvent,
 }
+
 
 pub fn parse(event: &str) -> Result<ParseOutput> {
     if event.contains("clientToMatchServiceMessage") {

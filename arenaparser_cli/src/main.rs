@@ -73,6 +73,27 @@ fn main() -> Result<()> {
             )",
             (),
         )?;
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS mulligans (
+                id INTEGER PRIMARY KEY,
+                match_id TEXT,
+                hand TEXT,
+                number_to_keep INTEGER,
+                FOREIGN KEY (match_id) REFERENCES matches(id)
+            )",
+            (),
+        )?;
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS decks (
+                match_id TEXT,
+                game_number INTEGER,
+                deck_cards TEXT,
+                sideboard_cards TEXT,
+                PRIMARY KEY (match_id, game_number),
+                FOREIGN KEY (match_id) REFERENCES matches(id)
+            )",
+            (),
+        )?;
         Some(conn)
     } else {
         None

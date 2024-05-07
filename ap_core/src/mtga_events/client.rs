@@ -235,7 +235,7 @@ pub struct ClientSettings {
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SubmitDeckResp {
-    deck: DeckMessage,
+    pub deck: DeckMessage,
 }
 
 
