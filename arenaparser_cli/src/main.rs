@@ -6,8 +6,8 @@ use std::time::Duration;
 use anyhow::Result;
 use clap::Parser;
 use crossbeam::channel::{Receiver, select, unbounded};
-
 use ap_core::arena_event_parser;
+use ap_core::match_insights::MatchInsightDB;
 use ap_core::replay::MatchReplayBuilder;
 
 use crate::processor::LogProcessor;
@@ -62,43 +62,11 @@ fn main() -> Result<()> {
     let follow = args.follow;
 
     let ctrl_c_rx = ctrl_c_channel()?;
-    let connection = if let Some(db_path) = args.db {
-        let conn = rusqlite::Connection::open(&db_path)?;
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS matches (
-                id TEXT PRIMARY KEY,
-                controller_seat_id INTEGER,
-                controller_player_name TEXT,
-                opponent_player_name TEXT
-            )",
-            (),
-        )?;
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS mulligans (
-                id INTEGER PRIMARY KEY,
-                match_id TEXT,
-                game_number INTEGER,
-                number_to_keep INTEGER,
-                hand TEXT,
-                play_draw TEXT,
-                opponent_identity TEXT,
-                decision TEXT,
-                FOREIGN KEY (match_id) REFERENCES matches(id)
-            )",
-            (),
-        )?;
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS decks (
-                match_id TEXT,
-                game_number INTEGER,
-                deck_cards TEXT,
-                sideboard_cards TEXT,
-                PRIMARY KEY (match_id, game_number),
-                FOREIGN KEY (match_id) REFERENCES matches(id)
-            )",
-            (),
-        )?;
-        Some(conn)
+    let mut connection = if let Some(db_path) = args.db {
+        let conn = rusqlite::Connection::open(db_path)?;
+        let mut db = MatchInsightDB::new(conn);
+        db.init()?;
+        Some(db)
     } else {
         None
     };
@@ -120,7 +88,7 @@ fn main() -> Result<()> {
                                     let match_replay = match_replay_builder.build()?;
                                     let path = args.output_dir.join(format!("{}.json", match_replay.match_id));
                                     println!("Writing match replay to file: {}", path.clone().to_str().unwrap());
-                                    if let Some(connection) = &connection {
+                                    if let Some(connection) = &mut connection {
                                         match_replay.write_to_db(connection)?;
                                     }
 

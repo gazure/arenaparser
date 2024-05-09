@@ -1,6 +1,7 @@
 pub mod arena_event_parser;
 pub mod mtga_events;
 pub mod replay;
+pub mod match_insights;
 
 use std::fmt::Display;
 use crate::mtga_events::gre::GameObject;

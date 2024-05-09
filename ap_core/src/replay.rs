@@ -6,11 +6,11 @@ use std::vec::IntoIter;
 
 use anyhow::{anyhow, Result};
 use lazy_static::lazy_static;
-use rusqlite::Connection;
 use serde::{Serialize, Serializer};
 
 use crate::arena_event_parser::ParseOutput;
 use crate::CardsDatabase;
+use crate::match_insights::MatchInsightDB;
 use crate::mtga_events::client::{
     ClientMessage, MulliganOption, MulliganRespWrapper, RequestTypeClientToMatchServiceMessage,
 };
@@ -155,7 +155,7 @@ impl MatchReplay {
         Ok(decklists)
     }
 
-    fn persist_mulligans(&self, conn: &Connection) -> Result<()> {
+    fn persist_mulligans(&self, db: &mut MatchInsightDB) -> Result<()> {
         let controller_id = self.get_controller_seat_id()?;
 
         let mut game_number = 1;
@@ -266,10 +266,7 @@ impl MatchReplay {
                         })
                         .collect::<Vec<String>>()
                         .join("|");
-                    conn.execute(
-                        "INSERT INTO mulligans (match_id, game_number, number_to_keep, hand, play_draw, opponent_identity, decision) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                        (&self.match_id, game_number, number_to_keep, hand_string, play_draw, "Blind", decision),
-                    )?;
+                    db.insert_mulligan_info(&self.match_id, game_number, number_to_keep, &hand_string, play_draw, "Blind", decision)?;
                 }
             }
         }
@@ -277,30 +274,19 @@ impl MatchReplay {
         Ok(())
     }
 
-    pub fn write_to_db(&self, conn: &Connection) -> Result<()> {
+    pub fn write_to_db(&self, conn: &mut MatchInsightDB) -> Result<()> {
         // write match replay to database
         let controller_seat_id = self.get_controller_seat_id()?;
         let (controller_name, opponent_name) = self.get_player_names(controller_seat_id)?;
 
-        conn.execute(
-            "INSERT INTO matches (id, controller_seat_id, controller_player_name, opponent_player_name) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(id) DO NOTHING",
-            (&self.match_id, controller_seat_id, controller_name, opponent_name),
-        )?;
+        conn.insert_match(&self.match_id, controller_seat_id, &controller_name, &opponent_name)?;
 
         let decklists = self.get_decklists()?;
         for (game_number, deck) in decklists.iter().enumerate() {
-            conn.execute(
-                "INSERT INTO decks
-                    (match_id, game_number, deck_cards, sideboard_cards)
-                    VALUES (?1, ?2, ?3, ?4)
-                    ON CONFLICT (match_id, game_number)
-                    DO UPDATE SET deck_cards = excluded.deck_cards, sideboard_cards = excluded.sideboard_cards",
-                (&self.match_id, (game_number + 1) as i32, serde_json::to_string(&deck.deck_cards)?, serde_json::to_string(&deck.sideboard_cards)?),
-            )?;
+            conn.insert_deck(&self.match_id, (game_number + 1) as i32, deck)?;
         }
 
         self.persist_mulligans(conn)?;
-
         Ok(())
     }
 }
