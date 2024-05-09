@@ -275,6 +275,8 @@ pub enum AnnotationType {
     Attachment,
     #[serde(rename = "AnnotationType_AttachmentCreated")]
     AttachmentCreated,
+    #[serde(rename = "AnnotationType_GroupedIds")]
+    GroupedIds,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

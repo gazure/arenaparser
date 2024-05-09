@@ -1,22 +1,29 @@
-use crate::arena_event_parser::{ParseOutput};
-use crate::mtga_events::client::{ClientMessage, RequestTypeClientToMatchServiceMessage};
-use crate::mtga_events::gre::{DeckMessage, GREToClientMessage, RequestTypeGREToClientEvent};
-use crate::mtga_events::mgrsc::{RequestTypeMGRSCEvent, StateType};
-use anyhow::{anyhow, Result};
-use rusqlite::Connection;
-use serde::{Serialize, Serializer};
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::vec::IntoIter;
+
+use anyhow::{anyhow, Result};
 use lazy_static::lazy_static;
+use rusqlite::Connection;
+use serde::{Serialize, Serializer};
+
+use crate::arena_event_parser::ParseOutput;
 use crate::CardsDatabase;
+use crate::mtga_events::client::{
+    ClientMessage, MulliganOption, MulliganRespWrapper, RequestTypeClientToMatchServiceMessage,
+};
+use crate::mtga_events::gre::{
+    DeckMessage, GREToClientMessage, MulliganReqWrapper, RequestTypeGREToClientEvent,
+};
+use crate::mtga_events::mgrsc::{RequestTypeMGRSCEvent, StateType};
+use crate::mtga_events::primitives::ZoneType;
 
 // TODO: figure out better way of doing cards.db
-lazy_static!(
+lazy_static! {
     static ref CARDS_DB: CardsDatabase = CardsDatabase::new().unwrap();
-);
-
+}
 
 fn write_line<T>(writer: &mut BufWriter<File>, line: &T) -> Result<()>
 where
@@ -50,17 +57,14 @@ pub enum MatchReplayEventRef<'a> {
 }
 
 impl<'a> Serialize for MatchReplayEventRef<'a> {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> where S: Serializer {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
         match self {
-            Self::MGRSC(event) => {
-                event.serialize(serializer)
-            }
-            Self::GRE(event) => {
-                event.serialize(serializer)
-            }
-            Self::Client(event) => {
-                event.serialize(serializer)
-            }
+            Self::MGRSC(event) => event.serialize(serializer),
+            Self::GRE(event) => event.serialize(serializer),
+            Self::Client(event) => event.serialize(serializer),
         }
     }
 }
@@ -75,18 +79,32 @@ impl MatchReplay {
         }
         Ok(())
     }
+    fn gre_events_iter(&self) -> impl Iterator<Item = &RequestTypeGREToClientEvent> {
+        self.client_server_messages
+            .iter()
+            .filter_map(|mre| match mre {
+                MatchReplayEvent::GRE(message) => Some(message),
+                _ => None,
+            })
+    }
+
+    fn gre_messages_iter(&self) -> impl Iterator<Item = &GREToClientMessage> {
+        self.gre_events_iter()
+            .flat_map(|gre| &gre.gre_to_client_event.gre_to_client_messages)
+    }
+
+    fn client_messages_iter(
+        &self,
+    ) -> impl Iterator<Item = &RequestTypeClientToMatchServiceMessage> {
+        self.client_server_messages
+            .iter()
+            .filter_map(|mre| match mre {
+                MatchReplayEvent::Client(message) => Some(message),
+                _ => None,
+            })
+    }
     fn get_controller_seat_id(&self) -> Result<i32> {
-        let gre_messages = self.client_server_messages.iter().filter_map(|mre| {
-            match mre {
-                MatchReplayEvent::GRE(message) => {
-                    Some(message)
-                },
-                _ => None
-            }
-        });
-
-
-        for gre_payload in gre_messages {
+        for gre_payload in self.gre_events_iter() {
             for gre_message in &gre_payload.gre_to_client_event.gre_to_client_messages {
                 match gre_message {
                     GREToClientMessage::ConnectResp(wrapper) => {
@@ -117,20 +135,12 @@ impl MatchReplay {
     }
 
     fn get_initial_decklist(&self) -> Result<DeckMessage> {
-        let gre_messages = self.client_server_messages.iter().filter_map(|mre| {
-            match mre {
-                MatchReplayEvent::GRE(message) => {
-                    Some(message)
-                },
-                _ => None
-            }
-        });
-        for gre_payload in gre_messages {
+        for gre_payload in self.gre_events_iter() {
             for gre_message in &gre_payload.gre_to_client_event.gre_to_client_messages {
                 match gre_message {
                     GREToClientMessage::ConnectResp(wrapper) => {
                         return Ok(wrapper.connect_resp.deck_message.clone());
-                    },
+                    }
                     _ => {}
                 }
             }
@@ -139,16 +149,8 @@ impl MatchReplay {
     }
 
     fn get_sideboarded_decklists(&self) -> Vec<DeckMessage> {
-        let client_messages = self.client_server_messages.iter().filter_map(|mre| {
-            match mre {
-                MatchReplayEvent::Client(message) => {
-                    Some(message)
-                }
-                _ => None
-            }
-        });
         let mut decklists = Vec::new();
-        for message in client_messages {
+        for message in self.client_messages_iter() {
             match &message.payload {
                 ClientMessage::SubmitDeckResp(submit_deck_resp) => {
                     decklists.push(submit_deck_resp.submit_deck_resp.deck.clone());
@@ -163,6 +165,129 @@ impl MatchReplay {
         let mut decklists = vec![self.get_initial_decklist()?];
         decklists.append(&mut self.get_sideboarded_decklists());
         Ok(decklists)
+    }
+
+    fn persist_mulligans(&self, conn: &Connection) -> Result<()> {
+        let controller_id = self.get_controller_seat_id()?;
+
+        let mut game_number = 1;
+        let mut opening_hands = BTreeMap::<i32, Vec<Vec<i32>>>::new();
+        let mut mulligan_requests = BTreeMap::<i32, Vec<&MulliganReqWrapper>>::new();
+        let mut play_or_draw: BTreeMap<i32, String> = BTreeMap::new();
+
+        for gre in self.gre_messages_iter() {
+            match gre {
+                GREToClientMessage::GameStateMessage(wrapper) => {
+                    let gsm = &wrapper.game_state_message;
+
+                    if gsm.players.len() == 2 && gsm.players.iter().all(|player| player.pending_message_type == Some("ClientMessageType_MulliganResp".to_string())) {
+                        if let Some(turn_info) = &gsm.turn_info {
+                            if let Some(decision_player) = turn_info.decision_player {
+                                if decision_player == controller_id {
+                                    println!("game_number: {}, play_or_draw: Play", game_number);
+                                    play_or_draw.insert(game_number, "Play".to_string());
+                                } else {
+                                    println!("game_number: {}, play_or_draw: Draw", game_number);
+                                    play_or_draw.insert(game_number, "Draw".to_string());
+                                }
+                            }
+                        }
+                    }
+
+                    if gsm.players.iter().any(|player| {
+                        player.controller_seat_id == controller_id
+                            && player.pending_message_type
+                                == Some("ClientMessageType_MulliganResp".to_string())
+                    }) {
+                        let controller_hand_zone_id = gsm
+                            .zones
+                            .iter()
+                            .filter(|zone| {
+                                zone.type_field == ZoneType::Hand
+                                    && zone.owner_seat_id == Some(controller_id)
+                            })
+                            .next()
+                            .ok_or(anyhow!("Controller hand zone not found"))?
+                            .zone_id;
+                        let game_objects_in_hand: Vec<i32> = gsm
+                            .game_objects
+                            .iter()
+                            .filter(|go| {
+                                go.zone_id.is_some()
+                                    && go.zone_id.unwrap() == controller_hand_zone_id
+                            })
+                            .map(|go| go.grp_id)
+                            .collect();
+                        opening_hands
+                            .entry(game_number)
+                            .or_insert_with(Vec::new)
+                            .push(game_objects_in_hand);
+                    }
+                }
+                GREToClientMessage::MulliganReq(wrapper) => {
+                    mulligan_requests
+                        .entry(game_number)
+                        .or_insert_with(Vec::new)
+                        .push(wrapper);
+                }
+                GREToClientMessage::IntermissionReq(_) => {
+                    game_number += 1;
+                }
+                _ => {}
+            }
+        }
+
+        let mulligan_responses: BTreeMap<i32, &MulliganRespWrapper> = self
+            .client_messages_iter()
+            .filter_map(|client_message| match &client_message.payload {
+                ClientMessage::MulliganResp(wrapper) => Some((wrapper.meta.resp_id?, wrapper)),
+                _ => None,
+            })
+            .collect();
+
+        for (game_number, hands) in opening_hands {
+            let mut mulligan_requests_iter = mulligan_requests
+                .get(&game_number)
+                .ok_or(anyhow!(
+                    "No mulligan requests found for game {}",
+                    game_number
+                ))?
+                .iter();
+            let play_draw = play_or_draw.get(&game_number).ok_or(anyhow!(
+                "No play/draw decision found for game {}",
+                game_number
+            ))?;
+            for hand in hands {
+                if let Some(mulligan_request) = mulligan_requests_iter.next() {
+                    let mulligan_response = mulligan_responses
+                        .get(&mulligan_request.meta.msg_id)
+                        .ok_or(anyhow!(
+                        "No mulligan response for request {}",
+                        mulligan_request.meta.msg_id
+                    ))?;
+                    let number_to_keep = 7 - mulligan_request.mulligan_req.mulligan_count;
+                    let decision = match mulligan_response.mulligan_resp.decision {
+                        MulliganOption::AcceptHand => "Keep",
+                        MulliganOption::Mulligan => "Mulligan",
+                    };
+                    let hand_string = hand
+                        .iter()
+                        .map(|grp_id| {
+                            CARDS_DB
+                                .get_pretty_name(grp_id)
+                                .unwrap_or(grp_id.to_string())
+                        })
+                        .collect::<Vec<String>>()
+                        .join("|");
+                    conn.execute(
+                        "INSERT INTO mulligans (match_id, game_number, number_to_keep, hand, play_draw, opponent_identity, decision) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        (&self.match_id, game_number, number_to_keep, hand_string, play_draw, "Blind", decision),
+                    )?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     pub fn write_to_db(&self, conn: &Connection) -> Result<()> {
@@ -187,6 +312,8 @@ impl MatchReplay {
             )?;
         }
 
+        self.persist_mulligans(conn)?;
+
         Ok(())
     }
 }
@@ -199,16 +326,10 @@ impl<'a> IntoIterator for &'a MatchReplay {
         let mut events = Vec::new();
         events.push(MatchReplayEventRef::MGRSC(&self.match_start_message));
         self.client_server_messages.iter().for_each(|mre| {
-            let mre_ref  = match mre {
-                MatchReplayEvent::GRE(event) => {
-                    MatchReplayEventRef::GRE(event)
-                }
-                MatchReplayEvent::Client(event) => {
-                    MatchReplayEventRef::Client(event)
-                }
-                MatchReplayEvent::MGRSC(event) => {
-                    MatchReplayEventRef::MGRSC(event)
-                }
+            let mre_ref = match mre {
+                MatchReplayEvent::GRE(event) => MatchReplayEventRef::GRE(event),
+                MatchReplayEvent::Client(event) => MatchReplayEventRef::Client(event),
+                MatchReplayEvent::MGRSC(event) => MatchReplayEventRef::MGRSC(event),
             };
             events.push(mre_ref);
         });
@@ -222,7 +343,7 @@ pub struct MatchReplayBuilder {
     pub match_id: String,
     pub match_start_message: RequestTypeMGRSCEvent,
     pub match_end_message: RequestTypeMGRSCEvent,
-    pub client_server_messages: Vec<MatchReplayEvent>
+    pub client_server_messages: Vec<MatchReplayEvent>,
 }
 
 impl MatchReplayBuilder {
@@ -234,12 +355,12 @@ impl MatchReplayBuilder {
 
     pub fn ingest_event(&mut self, event: ParseOutput) -> bool {
         match event {
-            ParseOutput::GREMessage(gre_message) => {
-                self.client_server_messages.push(MatchReplayEvent::GRE(gre_message))
-            },
-            ParseOutput::ClientMessage(client_message) => {
-                self.client_server_messages.push(MatchReplayEvent::Client(client_message))
-            }
+            ParseOutput::GREMessage(gre_message) => self
+                .client_server_messages
+                .push(MatchReplayEvent::GRE(gre_message)),
+            ParseOutput::ClientMessage(client_message) => self
+                .client_server_messages
+                .push(MatchReplayEvent::Client(client_message)),
             ParseOutput::MGRSCMessage(mgrsc_event) => {
                 return self.ingest_mgrc_event(mgrsc_event);
             }
@@ -247,7 +368,6 @@ impl MatchReplayBuilder {
         }
         false
     }
-
 
     pub fn ingest_mgrc_event(&mut self, mgrsc_event: RequestTypeMGRSCEvent) -> bool {
         let state_type = mgrsc_event.mgrsc_event.game_room_info.state_type.clone();

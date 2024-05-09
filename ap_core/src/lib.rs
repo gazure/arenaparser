@@ -2,6 +2,7 @@ pub mod arena_event_parser;
 pub mod mtga_events;
 pub mod replay;
 
+use std::fmt::Display;
 use crate::mtga_events::gre::GameObject;
 use crate::mtga_events::mgrsc::MatchPlayer;
 use anyhow::Result;
@@ -62,9 +63,11 @@ impl CardsDatabase {
         Ok(Self { db: cards_db })
     }
 
-    pub fn get_pretty_name(&self, grp_id: &str) -> Result<String> {
+
+    pub fn get_pretty_name<T>(&self, grp_id: &T) -> Result<String> where T: Display + ?Sized {
+        let grp_id = grp_id.to_string();
         self.db
-            .get(grp_id)
+            .get(&grp_id)
             .ok_or_else(|| anyhow::anyhow!("Card not found in database"))
             .and_then(|card| {
                 card.get("pretty_name")

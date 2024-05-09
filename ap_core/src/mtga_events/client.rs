@@ -429,7 +429,7 @@ pub struct MulliganResp {
     pub decision: MulliganOption,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Deserialize, Serialize)]
 pub enum MulliganOption {
     #[default]
     #[serde(rename="MulliganOption_AcceptHand")]
