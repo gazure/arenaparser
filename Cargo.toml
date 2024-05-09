@@ -1,6 +1,6 @@
 [workspace]
-default-members = ["ap_core", "arenaparser_cli", "arenaparser_replay"]
-members = ["ap_core", "arenaparser_cli", "arenaparser_gui", "arenaparser_replay"]
+default-members = ["ap_core", "arenaparser_cli"]
+members = ["ap_core", "arenaparser_cli", "arenaparser_gui"]
 resolver = "2"
 
 [workspace.package]
@@ -15,8 +15,6 @@ license = "Apache-2.0 OR MIT"
 
 [workspace.dependencies]
 anyhow = "1.0.82"
-bevy = "0.13.2"
-bevy_crossbeam_event = "0.5.0"
 crossbeam = "0.8.0"
 ctrlc = "3.4.4"
 clap = { version = "4.5.4" , features = ["derive"]}

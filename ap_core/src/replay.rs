@@ -104,14 +104,9 @@ impl MatchReplay {
             })
     }
     fn get_controller_seat_id(&self) -> Result<i32> {
-        for gre_payload in self.gre_events_iter() {
-            for gre_message in &gre_payload.gre_to_client_event.gre_to_client_messages {
-                match gre_message {
-                    GREToClientMessage::ConnectResp(wrapper) => {
-                        return Ok(wrapper.meta.system_seat_ids[0]);
-                    }
-                    _ => {}
-                }
+        for gre_message in self.gre_messages_iter() {
+            if let GREToClientMessage::ConnectResp(wrapper) = gre_message {
+                return Ok(wrapper.meta.system_seat_ids[0]);
             }
         }
         Err(anyhow!("Controller seat ID not found"))
@@ -135,14 +130,9 @@ impl MatchReplay {
     }
 
     fn get_initial_decklist(&self) -> Result<DeckMessage> {
-        for gre_payload in self.gre_events_iter() {
-            for gre_message in &gre_payload.gre_to_client_event.gre_to_client_messages {
-                match gre_message {
-                    GREToClientMessage::ConnectResp(wrapper) => {
-                        return Ok(wrapper.connect_resp.deck_message.clone());
-                    }
-                    _ => {}
-                }
+        for gre_message in self.gre_messages_iter() {
+            if let GREToClientMessage::ConnectResp(wrapper) = gre_message {
+                return Ok(wrapper.connect_resp.deck_message.clone());
             }
         }
         Err(anyhow!("Initial decklist not found"))
@@ -150,12 +140,10 @@ impl MatchReplay {
 
     fn get_sideboarded_decklists(&self) -> Vec<DeckMessage> {
         let mut decklists = Vec::new();
+
         for message in self.client_messages_iter() {
-            match &message.payload {
-                ClientMessage::SubmitDeckResp(submit_deck_resp) => {
-                    decklists.push(submit_deck_resp.submit_deck_resp.deck.clone());
-                }
-                _ => {}
+            if let ClientMessage::SubmitDeckResp(submit_deck_resp) = &message.payload {
+                decklists.push(submit_deck_resp.submit_deck_resp.deck.clone());
             }
         }
         decklists
@@ -202,11 +190,10 @@ impl MatchReplay {
                         let controller_hand_zone_id = gsm
                             .zones
                             .iter()
-                            .filter(|zone| {
+                            .find(|zone| {
                                 zone.type_field == ZoneType::Hand
                                     && zone.owner_seat_id == Some(controller_id)
                             })
-                            .next()
                             .ok_or(anyhow!("Controller hand zone not found"))?
                             .zone_id;
                         let game_objects_in_hand: Vec<i32> = gsm
@@ -220,14 +207,14 @@ impl MatchReplay {
                             .collect();
                         opening_hands
                             .entry(game_number)
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .push(game_objects_in_hand);
                     }
                 }
                 GREToClientMessage::MulliganReq(wrapper) => {
                     mulligan_requests
                         .entry(game_number)
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(wrapper);
                 }
                 GREToClientMessage::IntermissionReq(_) => {
