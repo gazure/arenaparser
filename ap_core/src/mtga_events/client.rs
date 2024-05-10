@@ -357,7 +357,7 @@ pub struct DeclareAttackersResp {
 pub struct Attacker {
     pub attacker_instance_id: i32,
     pub legal_damage_recipients: Vec<DamageRecipient>,
-    pub selected_damage_recipient: DamageRecipient,
+    pub selected_damage_recipient: Option<DamageRecipient>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]

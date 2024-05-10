@@ -78,7 +78,9 @@ impl MatchInsightDB {
     ) -> Result<()> {
         self.conn.execute(
             "INSERT INTO mulligans (match_id, game_number, number_to_keep, hand, play_draw, opponent_identity, decision)\
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)\
+             ON CONFLICT (match_id, game_number, number_to_keep) \
+             DO UPDATE SET hand = excluded.hand, play_draw = excluded.play_draw, opponent_identity = excluded.opponent_identity, decision = excluded.decision",
             (match_id, game_number, number_to_keep, hand, play_draw, opp_identity, decision),
         )?;
         Ok(())

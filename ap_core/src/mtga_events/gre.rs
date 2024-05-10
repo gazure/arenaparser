@@ -13,6 +13,30 @@ use crate::mtga_events::primitives::{Action, Annotation, MulliganType, OptionPro
 /// no clue what it actually stands for, but these are a bunch of events that come from
 /// the server to the game client
 ///
+///
+
+macro_rules! wrapper {
+    ($wrapperName:ident, $name:ident, $snake:ident) => {
+        #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+        #[serde(rename_all = "camelCase")]
+        pub struct $wrapperName {
+            #[serde(flatten)]
+            pub meta: GreMeta,
+            pub $snake: $name,
+        }
+    };
+    ($wrapperName:ident) => {
+        #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+        #[serde(rename_all = "camelCase")]
+        pub struct $wrapperName {
+            #[serde(flatten)]
+            pub meta: GreMeta,
+            #[serde(flatten)]
+            pub extra: HashMap<String, Value>
+        }
+
+    }
+}
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -108,184 +132,38 @@ pub struct GreMeta {
     pub game_state_id: Option<i32>,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EdictalMessageWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TimeoutMessageWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
+wrapper!(EdictalMessageWrapper);
+wrapper!(TimeoutMessageWrapper);
+wrapper!(GroupRespWrapper);
+wrapper!(GroupReqWrapper);
+wrapper!(OptionalActionMessageWrapper);
+wrapper!(SearchReqWrapper);
+wrapper!(SubmitDeckWrapper);
+wrapper!(OrderReqWrapper);
+wrapper!(SubmitBlockersRespWrapper);
+wrapper!(DeclareBlockersReqWrapper);
+wrapper!(UIMessageWrapper);
+wrapper!(SubmitDeckConfirmationWrapper);
+wrapper!(SubmitDeckReqWrapper);
+wrapper!(SubmitAttackersRespWrapper);
+wrapper!(DeclareAttackersReqWrapper);
+wrapper!(SelectNRespWrapper);
+wrapper!(PayCostsReqWrapper);
+wrapper!(IntermissionReqWrapper, IntermissionReq, intermission_req);
+wrapper!(CastingTimeOptionsReqWrapper);
+wrapper!(ChooseStartingPlayerReqWrapper);
+wrapper!(SubmitTargetsRespWrapper, SubmitTargetsResp, submit_targets_resp);
+wrapper!(ConnectRespWrapper, ConnectResp, connect_resp);
+wrapper!(DieRollResultsRespWrapper, DieRollResultsResp, die_roll_results_resp);
+wrapper!(ActionsAvailableReqWrapper, ActionsAvailableReq, actions_available_req);
+wrapper!(PromptReqWrapper, Prompt, prompt);
+wrapper!(SetSettingsRespWrapper, SetSettingsResp, set_settings_resp);
+wrapper!(QueuedStateMessageWrapper);
+wrapper!(TimerStateMessageWrapper);
+wrapper!(GameStateMessageWrapper, GameStateMessage, game_state_message);
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GroupRespWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GroupReqWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OptionalActionMessageWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SearchReqWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SubmitDeckReqWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OrderReqWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SubmitBlockersRespWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DeclareBlockersReqWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UIMessageWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SubmitDeckConfirmationWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SubmitAttackersRespWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DeclareAttackersReqWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SelectNRespWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PayCostsReqWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct IntermissionReqWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    pub intermission_req: IntermissionReq,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct IntermissionReq {
-    pub intermission_prompt: Option<Prompt>,
-    #[serde(default)]
-    pub options: Vec<OptionPrompt>,
-    pub result: ResultListEntry,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CastingTimeOptionsReqWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChooseStartingPlayerReqWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -299,13 +177,6 @@ pub struct SelectNReqWrapper {
     pub meta: GreMeta,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SubmitTargetsRespWrapper {
-    pub submit_targets_resp: SubmitTargetsResp,
-    #[serde(flatten)]
-    pub meta: GreMeta,
-}
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -321,30 +192,6 @@ pub struct SelectTargetsReqWrapper {
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConnectRespWrapper {
-    pub connect_resp: ConnectResp,
-    #[serde(flatten)]
-    pub meta: GreMeta,
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DieRollResultsRespWrapper {
-    pub die_roll_results_resp: DieRollResultsResp,
-    #[serde(flatten)]
-    pub meta: GreMeta,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ActionsAvailableReqWrapper {
-    pub actions_available_req: ActionsAvailableReq,
-    #[serde(flatten)]
-    pub meta: GreMeta,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct MulliganReqWrapper {
     pub mulligan_req: MulliganReq,
     pub prompt: Option<Prompt>,
@@ -354,36 +201,11 @@ pub struct MulliganReqWrapper {
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PromptReqWrapper {
-    pub prompt: Prompt,
-    #[serde(flatten)]
-    pub meta: GreMeta,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SetSettingsRespWrapper {
-    pub set_settings_resp: SetSettingsResp,
-    #[serde(flatten)]
-    pub meta: GreMeta,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct QueuedStateMessageWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TimerStateMessageWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
+pub struct IntermissionReq {
+    pub intermission_prompt: Option<Prompt>,
+    #[serde(default)]
+    pub options: Vec<OptionPrompt>,
+    pub result: ResultListEntry,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -526,14 +348,6 @@ pub struct Settings {
     pub transient_stops: Vec<Stop>,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GameStateMessageWrapper {
-    #[serde(flatten)]
-    pub meta: GreMeta,
-    pub game_state_message: GameStateMessage,
-}
-
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameStateMessage {
@@ -625,6 +439,8 @@ pub enum GameObjectType {
     Token,
     #[serde(rename = "GameObjectType_Adventure")]
     Adventure,
+    #[serde(rename = "GameObjectType_DisturbBack")]
+    DisturbBack,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
