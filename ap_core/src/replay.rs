@@ -17,7 +17,7 @@ use crate::mtga_events::client::{
 use crate::mtga_events::gre::{
     DeckMessage, GREToClientMessage, MulliganReqWrapper, RequestTypeGREToClientEvent,
 };
-use crate::mtga_events::mgrsc::{RequestTypeMGRSCEvent, StateType};
+use crate::mtga_events::mgrsc::{FinalMatchResult, RequestTypeMGRSCEvent, StateType};
 use crate::mtga_events::primitives::ZoneType;
 
 // TODO: figure out better way of doing cards.db
@@ -129,6 +129,10 @@ impl MatchReplay {
         Err(anyhow!("player names not found"))
     }
 
+    fn get_match_results(&self) -> Result<FinalMatchResult> {
+        self.match_end_message.mgrsc_event.game_room_info.final_match_result.clone().ok_or(anyhow!("Match results not found"))
+    }
+
     fn get_initial_decklist(&self) -> Result<DeckMessage> {
         for gre_message in self.gre_messages_iter() {
             if let GREToClientMessage::ConnectResp(wrapper) = gre_message {
@@ -227,7 +231,7 @@ impl MatchReplay {
         let mulligan_responses: BTreeMap<i32, &MulliganRespWrapper> = self
             .client_messages_iter()
             .filter_map(|client_message| match &client_message.payload {
-                ClientMessage::MulliganResp(wrapper) => Some((wrapper.meta.resp_id?, wrapper)),
+                ClientMessage::MulliganResp(wrapper) => Some((wrapper.meta.game_state_id?, wrapper)),
                 _ => None,
             })
             .collect();
@@ -245,27 +249,23 @@ impl MatchReplay {
                 game_number
             ))?;
             for hand in hands {
+                let hand_string = hand
+                    .iter()
+                    .map(|grp_id| {
+                        grp_id.to_string()
+                    })
+                    .collect::<Vec<String>>()
+                    .join(",");
                 if let Some(mulligan_request) = mulligan_requests_iter.next() {
-                    let mulligan_response = mulligan_responses
-                        .get(&mulligan_request.meta.msg_id)
-                        .ok_or(anyhow!(
-                        "No mulligan response for request {}",
-                        mulligan_request.meta.msg_id
-                    ))?;
+                    let game_state_id = mulligan_request.meta.game_state_id.unwrap();
                     let number_to_keep = 7 - mulligan_request.mulligan_req.mulligan_count;
-                    let decision = match mulligan_response.mulligan_resp.decision {
-                        MulliganOption::AcceptHand => "Keep",
-                        MulliganOption::Mulligan => "Mulligan",
+                    let decision = match mulligan_responses.get(&game_state_id) {
+                        Some(mulligan_response) => match mulligan_response.mulligan_resp.decision {
+                            MulliganOption::AcceptHand => "Keep",
+                            MulliganOption::Mulligan => "Mulligan",
+                        }
+                        None => "Match Ended"
                     };
-                    let hand_string = hand
-                        .iter()
-                        .map(|grp_id| {
-                            CARDS_DB
-                                .get_pretty_name(grp_id)
-                                .unwrap_or(grp_id.to_string())
-                        })
-                        .collect::<Vec<String>>()
-                        .join("|");
                     db.insert_mulligan_info(&self.match_id, game_number, number_to_keep, &hand_string, play_draw, "Blind", decision)?;
                 }
             }
@@ -287,6 +287,16 @@ impl MatchReplay {
         }
 
         self.persist_mulligans(conn)?;
+
+        // not too keen on this data model
+        let match_results = self.get_match_results()?;
+        for (i, result) in match_results.result_list.iter().enumerate() {
+            if result.scope == "MatchScope_Game" {
+                conn.insert_match_result(&self.match_id, Some((i + 1) as i32), result.winning_team_id, result.scope.clone())?;
+            } else {
+                conn.insert_match_result(&self.match_id, None, result.winning_team_id, result.scope.clone())?;
+            }
+        }
         Ok(())
     }
 }

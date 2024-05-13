@@ -98,7 +98,7 @@ fn main() -> Result<()> {
                                 }
                             }
                             Err(e) => {
-                                eprintln!("Error parsing event: {:?}", e);
+                                eprintln!("Error parsing event: {}", e);
                             }
                         }
                     }

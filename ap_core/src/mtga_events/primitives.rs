@@ -277,6 +277,14 @@ pub enum AnnotationType {
     AttachmentCreated,
     #[serde(rename = "AnnotationType_GroupedIds")]
     GroupedIds,
+    #[serde(rename = "AnnotationType_ReplacementEffectApplied")]
+    ReplacementEffectApplied,
+    #[serde(rename = "AnnotationType_Scry")]
+    Scry,
+    #[serde(rename = "AnnotationType_DelayedTriggerAffectees")]
+    DelayedTriggerAffectees,
+    #[serde(rename = "AnnotationType_DungeonStatus")]
+    DungeonStatus,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

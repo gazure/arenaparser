@@ -118,6 +118,14 @@ pub enum GREToClientMessage {
     TimeoutMessage(TimeoutMessageWrapper),
     #[serde(rename = "GREMessageType_EdictalMessage")]
     EdictalMessage(EdictalMessageWrapper),
+    #[serde(rename = "GREMessageType_OrderCombatDamageReq")]
+    OrderCombatMessageReq(OrderCombatDamageReqWrapper),
+    #[serde(rename = "GREMessageType_OrderDamageConfirmation")]
+    OrderDamageConfirmation(OrderDamageConfirmationWrapper),
+    #[serde(rename = "GREMessageType_AssignDamageReq")]
+    AssignDamageReq(AssignDamageReqWrapper),
+    #[serde(rename = "GREMessageType_AssignDamageConfirmation")]
+    AssignDamageConfirmation(AssignDamageConfirmationWrapper),
     #[default]
     Default,
 }
@@ -133,6 +141,10 @@ pub struct GreMeta {
 }
 
 
+wrapper!(AssignDamageReqWrapper);
+wrapper!(AssignDamageConfirmationWrapper);
+wrapper!(OrderDamageConfirmationWrapper);
+wrapper!(OrderCombatDamageReqWrapper);
 wrapper!(EdictalMessageWrapper);
 wrapper!(TimeoutMessageWrapper);
 wrapper!(GroupRespWrapper);

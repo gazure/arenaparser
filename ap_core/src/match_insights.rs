@@ -85,4 +85,13 @@ impl MatchInsightDB {
         )?;
         Ok(())
     }
+
+    pub fn insert_match_result(&mut self, match_id: &str, game_number: Option<i32>, winning_team_id: i32, result_scope: String) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO match_results (match_id, game_number, winning_team_id, result_scope) VALUES (?1, ?2, ?3, ?4)",
+            (match_id, game_number, winning_team_id, result_scope)
+        )?;
+
+        Ok(())
+    }
 }
