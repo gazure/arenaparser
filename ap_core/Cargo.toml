@@ -17,4 +17,5 @@ lazy_static = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 rusqlite = { workspace = true, features = ["bundled"] }
+tracing = { workspace = true }
 rusqlite_migration = { workspace = true, features = ["from-directory"] }

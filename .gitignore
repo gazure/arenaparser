@@ -3,3 +3,4 @@ target/
 match_replays/
 output.json
 data/matches.db
+data/oracle*

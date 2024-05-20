@@ -1,40 +1,32 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
-use eframe::egui;
+use rusqlite::Connection;
+use anyhow::Result;
+use ap_core::cards::CardsDatabase;
+use serde_json;
+use ap_core::mtga_events::gre::DeckMessage;
+use ap_core::deck::Deck;
 
-#[derive(Debug, Default)]
-struct ArenaParserGUI {
-    picked_dir: Option<String>
-}
-
-impl eframe::App for ArenaParserGUI {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Arena Parser GUI");
-            ui.horizontal(|ui| {
-                ui.label("Pick a directory:");
-                if ui.button("Pick").clicked() {
-                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                        self.picked_dir = Some(path.display().to_string());
-                    }
-                }
-            });
-            if let Some(dir) = &self.picked_dir {
-                ui.label(format!("Picked directory: {}", dir));
-            }
-        });
+fn main() -> Result<()> {
+    let cards_path = "data/cards-full.json";
+    let cards_db = CardsDatabase::new(cards_path)?;
+    let db_path = "data/matches.db";
+    let conn = Connection::open(db_path)?;
+    let mut statement = conn.prepare("SELECT match_id, game_number, deck_cards, sideboard_cards FROM decks")?;
+    let decks = statement.query_map([], |row| {
+        let match_id: String = row.get(0)?;
+        let game_number: i32 = row.get(1)?;
+        let name = format!("{}: Game {}", match_id, game_number);
+        let mainboard_str: String = row.get(2)?;
+        let mainboard: Vec<i32> = serde_json::from_str(&mainboard_str).unwrap_or_default();
+        let sideboard_str: String = row.get(3)?;
+        let sideboard: Vec<i32> = serde_json::from_str(&sideboard_str).unwrap_or_default();
+        let deck_message = DeckMessage {
+            deck_cards: mainboard,
+            sideboard_cards: sideboard,
+        };
+        Ok(Deck::new(name, &deck_message, &cards_db))
+    })?;
+    for deck in decks {
+        println!("{}\n", deck?);
     }
-}
-
-fn main() {
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([640.0, 240.0]) // wide enough for the drag-drop overlay text
-            .with_drag_and_drop(true),
-        ..Default::default()
-    };
-    eframe::run_native(
-        "Native file dialogs and drag-and-drop files",
-        options,
-        Box::new(|_cc| Box::<ArenaParserGUI>::default()),
-    ).expect("TODO: panic message");
+    Ok(())
 }

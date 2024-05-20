@@ -2,7 +2,7 @@ use crate::mtga_events::gre::DeckMessage;
 use anyhow::Result;
 use include_dir::{include_dir, Dir};
 use lazy_static::lazy_static;
-use rusqlite::{Connection, Params, Result as RusqliteResult};
+use rusqlite::{Connection, Params as RusqliteParams, Result as RusqliteResult};
 use rusqlite_migration::Migrations;
 
 static MIGRATIONS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/migrations");
@@ -14,7 +14,7 @@ lazy_static! {
 
 #[derive(Debug)]
 pub struct MatchInsightDB {
-    conn: Connection,
+    pub conn: Connection,
 }
 
 impl MatchInsightDB {
@@ -26,7 +26,7 @@ impl MatchInsightDB {
         Ok(())
     }
 
-    pub fn execute(&mut self, query: &str, params: impl Params) -> RusqliteResult<usize> {
+    pub fn execute(&mut self, query: &str, params: impl RusqliteParams) -> RusqliteResult<usize> {
         self.conn.execute(query, params)
     }
 
@@ -86,12 +86,31 @@ impl MatchInsightDB {
         Ok(())
     }
 
-    pub fn insert_match_result(&mut self, match_id: &str, game_number: Option<i32>, winning_team_id: i32, result_scope: String) -> Result<()> {
+    pub fn insert_match_result(
+        &mut self,
+        match_id: &str,
+        game_number: Option<i32>,
+        winning_team_id: i32,
+        result_scope: String,
+    ) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO match_results (match_id, game_number, winning_team_id, result_scope) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO match_results (match_id, game_number, winning_team_id, result_scope)\
+             VALUES (?1, ?2, ?3, ?4)\
+             ON CONFLICT (match_id, game_number)\
+             DO DO UPDATE SET winning_team_id = excluded.winning_team_id, result_scope = excluded.result_scope",
             (match_id, game_number, winning_team_id, result_scope)
         )?;
 
         Ok(())
+    }
+
+    pub fn get_match_results(&mut self, match_id: &str) -> Result<Vec<(i32, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT game_number, result_scope FROM match_results WHERE match_id = ?1",
+        )?;
+        let results = stmt
+            .query_map(&[match_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<rusqlite::Result<Vec<(i32, String)>>>()?;
+        Ok(results)
     }
 }

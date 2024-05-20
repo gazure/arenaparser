@@ -5,11 +5,9 @@ use std::path::PathBuf;
 use std::vec::IntoIter;
 
 use anyhow::{anyhow, Result};
-use lazy_static::lazy_static;
 use serde::{Serialize, Serializer};
 
 use crate::arena_event_parser::ParseOutput;
-use crate::CardsDatabase;
 use crate::match_insights::MatchInsightDB;
 use crate::mtga_events::client::{
     ClientMessage, MulliganOption, MulliganRespWrapper, RequestTypeClientToMatchServiceMessage,
@@ -19,11 +17,6 @@ use crate::mtga_events::gre::{
 };
 use crate::mtga_events::mgrsc::{FinalMatchResult, RequestTypeMGRSCEvent, StateType};
 use crate::mtga_events::primitives::ZoneType;
-
-// TODO: figure out better way of doing cards.db
-lazy_static! {
-    static ref CARDS_DB: CardsDatabase = CardsDatabase::new().unwrap();
-}
 
 fn write_line<T>(writer: &mut BufWriter<File>, line: &T) -> Result<()>
 where
