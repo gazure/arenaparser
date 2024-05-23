@@ -285,6 +285,8 @@ pub enum AnnotationType {
     DelayedTriggerAffectees,
     #[serde(rename = "AnnotationType_DungeonStatus")]
     DungeonStatus,
+    #[serde(rename = "AnnotationType_TokenImmediatelyDied")]
+    TokenImmediatelyDied,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

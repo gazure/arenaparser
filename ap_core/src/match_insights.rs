@@ -97,7 +97,7 @@ impl MatchInsightDB {
             "INSERT INTO match_results (match_id, game_number, winning_team_id, result_scope)\
              VALUES (?1, ?2, ?3, ?4)\
              ON CONFLICT (match_id, game_number)\
-             DO DO UPDATE SET winning_team_id = excluded.winning_team_id, result_scope = excluded.result_scope",
+             DO UPDATE SET winning_team_id = excluded.winning_team_id, result_scope = excluded.result_scope",
             (match_id, game_number, winning_team_id, result_scope)
         )?;
 

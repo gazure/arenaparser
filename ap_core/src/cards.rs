@@ -16,6 +16,7 @@ pub struct CardDbEntry {
     pub id: String,
     pub name: String,
     pub pretty_name: String,
+    pub color_identity: Vec<String>
 }
 
 impl CardsDatabase {
@@ -38,6 +39,12 @@ impl CardsDatabase {
         self.get_pretty_name(grp_id)
             .unwrap_or_else(|_| grp_id.to_string())
     }
+
+    pub fn get<T>(&self, grp_id: &T) -> Option<&CardDbEntry> where T: Display + ?Sized {
+        let grp_id = grp_id.to_string();
+        self.db.get(&grp_id)
+    }
+
 }
 
 impl Default for CardsDatabase {

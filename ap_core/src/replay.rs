@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
@@ -6,14 +6,17 @@ use std::vec::IntoIter;
 
 use anyhow::{anyhow, Result};
 use serde::{Serialize, Serializer};
+use tracing::debug;
 
 use crate::arena_event_parser::ParseOutput;
+use crate::cards::CardsDatabase;
 use crate::match_insights::MatchInsightDB;
 use crate::mtga_events::client::{
     ClientMessage, MulliganOption, MulliganRespWrapper, RequestTypeClientToMatchServiceMessage,
 };
 use crate::mtga_events::gre::{
-    DeckMessage, GREToClientMessage, MulliganReqWrapper, RequestTypeGREToClientEvent,
+    DeckMessage, GREToClientMessage, GameObjectType, GameStateMessage, MulliganReqWrapper,
+    RequestTypeGREToClientEvent,
 };
 use crate::mtga_events::mgrsc::{FinalMatchResult, RequestTypeMGRSCEvent, StateType};
 use crate::mtga_events::primitives::ZoneType;
@@ -86,6 +89,14 @@ impl MatchReplay {
             .flat_map(|gre| &gre.gre_to_client_event.gre_to_client_messages)
     }
 
+    fn game_state_messages_iter(&self) -> impl Iterator<Item = &GameStateMessage> {
+        self.gre_messages_iter()
+            .filter_map(|gre_message| match gre_message {
+                GREToClientMessage::GameStateMessage(wrapper) => Some(&wrapper.game_state_message),
+                _ => None,
+            })
+    }
+
     fn client_messages_iter(
         &self,
     ) -> impl Iterator<Item = &RequestTypeClientToMatchServiceMessage> {
@@ -122,8 +133,45 @@ impl MatchReplay {
         Err(anyhow!("player names not found"))
     }
 
+    fn get_opponent_cards(&self) -> Result<Vec<i32>> {
+        let controller_id = self.get_controller_seat_id()?;
+        let opponent_cards = self
+            .game_state_messages_iter()
+            .flat_map(|gsm| &gsm.game_objects)
+            .filter(|game_object| game_object.owner_seat_id != controller_id)
+            .filter(|game_object| {
+                game_object.type_field == GameObjectType::Card
+                    || game_object.type_field == GameObjectType::MDFCBack
+            })
+            .map(|game_object| game_object.grp_id)
+            .collect();
+        Ok(opponent_cards)
+    }
+
+    fn get_opponent_color_identity(&self, cards_db: &CardsDatabase) -> Result<String> {
+        let opponent_cards = self.get_opponent_cards()?;
+        let mut color_identity = BTreeSet::new();
+        for card in opponent_cards {
+            if let Some(card_db_entry) = cards_db.get(&card) {
+                let colors = if card_db_entry.name == "jegantha_the_wellspring" {
+                    vec!["R".to_string(), "G".to_string()]
+                } else {
+                    card_db_entry.color_identity.clone()
+                };
+                debug!("card: {}, colors: {:?}", card_db_entry.name, colors);
+                color_identity.extend(colors);
+            }
+        }
+        Ok(color_identity.into_iter().collect::<Vec<_>>().join(""))
+    }
+
     fn get_match_results(&self) -> Result<FinalMatchResult> {
-        self.match_end_message.mgrsc_event.game_room_info.final_match_result.clone().ok_or(anyhow!("Match results not found"))
+        self.match_end_message
+            .mgrsc_event
+            .game_room_info
+            .final_match_result
+            .clone()
+            .ok_or(anyhow!("Match results not found"))
     }
 
     fn get_initial_decklist(&self) -> Result<DeckMessage> {
@@ -152,20 +200,26 @@ impl MatchReplay {
         Ok(decklists)
     }
 
-    fn persist_mulligans(&self, db: &mut MatchInsightDB) -> Result<()> {
+    fn persist_mulligans(&self, db: &mut MatchInsightDB, cards_db: &CardsDatabase) -> Result<()> {
         let controller_id = self.get_controller_seat_id()?;
 
         let mut game_number = 1;
         let mut opening_hands = BTreeMap::<i32, Vec<Vec<i32>>>::new();
         let mut mulligan_requests = BTreeMap::<i32, Vec<&MulliganReqWrapper>>::new();
         let mut play_or_draw: BTreeMap<i32, String> = BTreeMap::new();
+        let opponent_color_identity = self.get_opponent_color_identity(cards_db)?;
 
         for gre in self.gre_messages_iter() {
             match gre {
                 GREToClientMessage::GameStateMessage(wrapper) => {
                     let gsm = &wrapper.game_state_message;
 
-                    if gsm.players.len() == 2 && gsm.players.iter().all(|player| player.pending_message_type == Some("ClientMessageType_MulliganResp".to_string())) {
+                    if gsm.players.len() == 2
+                        && gsm.players.iter().all(|player| {
+                            player.pending_message_type
+                                == Some("ClientMessageType_MulliganResp".to_string())
+                        })
+                    {
                         if let Some(turn_info) = &gsm.turn_info {
                             if let Some(decision_player) = turn_info.decision_player {
                                 if decision_player == controller_id {
@@ -199,6 +253,7 @@ impl MatchReplay {
                             .filter(|go| {
                                 go.zone_id.is_some()
                                     && go.zone_id.unwrap() == controller_hand_zone_id
+                                    && go.type_field == GameObjectType::Card
                             })
                             .map(|go| go.grp_id)
                             .collect();
@@ -224,7 +279,9 @@ impl MatchReplay {
         let mulligan_responses: BTreeMap<i32, &MulliganRespWrapper> = self
             .client_messages_iter()
             .filter_map(|client_message| match &client_message.payload {
-                ClientMessage::MulliganResp(wrapper) => Some((wrapper.meta.game_state_id?, wrapper)),
+                ClientMessage::MulliganResp(wrapper) => {
+                    Some((wrapper.meta.game_state_id?, wrapper))
+                }
                 _ => None,
             })
             .collect();
@@ -244,9 +301,7 @@ impl MatchReplay {
             for hand in hands {
                 let hand_string = hand
                     .iter()
-                    .map(|grp_id| {
-                        grp_id.to_string()
-                    })
+                    .map(|grp_id| grp_id.to_string())
                     .collect::<Vec<String>>()
                     .join(",");
                 if let Some(mulligan_request) = mulligan_requests_iter.next() {
@@ -256,10 +311,23 @@ impl MatchReplay {
                         Some(mulligan_response) => match mulligan_response.mulligan_resp.decision {
                             MulliganOption::AcceptHand => "Keep",
                             MulliganOption::Mulligan => "Mulligan",
-                        }
-                        None => "Match Ended"
+                        },
+                        None => "Match Ended",
                     };
-                    db.insert_mulligan_info(&self.match_id, game_number, number_to_keep, &hand_string, play_draw, "Blind", decision)?;
+                    let opp_identity = if game_number == 1 {
+                        "Unknown"
+                    } else {
+                        &opponent_color_identity
+                    };
+                    db.insert_mulligan_info(
+                        &self.match_id,
+                        game_number,
+                        number_to_keep,
+                        &hand_string,
+                        play_draw,
+                        opp_identity,
+                        decision,
+                    )?;
                 }
             }
         }
@@ -267,27 +335,42 @@ impl MatchReplay {
         Ok(())
     }
 
-    pub fn write_to_db(&self, conn: &mut MatchInsightDB) -> Result<()> {
+    pub fn write_to_db(&self, conn: &mut MatchInsightDB, cards_db: &CardsDatabase) -> Result<()> {
         // write match replay to database
         let controller_seat_id = self.get_controller_seat_id()?;
         let (controller_name, opponent_name) = self.get_player_names(controller_seat_id)?;
 
-        conn.insert_match(&self.match_id, controller_seat_id, &controller_name, &opponent_name)?;
+        conn.insert_match(
+            &self.match_id,
+            controller_seat_id,
+            &controller_name,
+            &opponent_name,
+        )?;
 
         let decklists = self.get_decklists()?;
         for (game_number, deck) in decklists.iter().enumerate() {
             conn.insert_deck(&self.match_id, (game_number + 1) as i32, deck)?;
         }
 
-        self.persist_mulligans(conn)?;
+        self.persist_mulligans(conn, cards_db)?;
 
         // not too keen on this data model
         let match_results = self.get_match_results()?;
         for (i, result) in match_results.result_list.iter().enumerate() {
             if result.scope == "MatchScope_Game" {
-                conn.insert_match_result(&self.match_id, Some((i + 1) as i32), result.winning_team_id, result.scope.clone())?;
+                conn.insert_match_result(
+                    &self.match_id,
+                    Some((i + 1) as i32),
+                    result.winning_team_id,
+                    result.scope.clone(),
+                )?;
             } else {
-                conn.insert_match_result(&self.match_id, None, result.winning_team_id, result.scope.clone())?;
+                conn.insert_match_result(
+                    &self.match_id,
+                    None,
+                    result.winning_team_id,
+                    result.scope.clone(),
+                )?;
             }
         }
         Ok(())

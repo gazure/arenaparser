@@ -1,16 +1,16 @@
 use std::fs::File;
-use std::io::{BufRead, BufReader, };
-use std::path::{PathBuf};
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use std::time::Duration;
 
-use tracing::{info, error};
 use anyhow::Result;
-use clap::Parser;
-use crossbeam::channel::{Receiver, select, unbounded};
 use ap_core::arena_event_parser;
 use ap_core::match_insights::MatchInsightDB;
-use ap_core::replay::MatchReplayBuilder;
 use ap_core::processor::LogProcessor;
+use ap_core::replay::MatchReplayBuilder;
+use clap::Parser;
+use crossbeam::channel::{select, unbounded, Receiver};
+use tracing::{error, info};
 
 fn get_log_lines(reader: &mut impl BufRead) -> Vec<String> {
     // read lines from reader
@@ -37,6 +37,10 @@ struct Args {
     output_dir: PathBuf,
     #[arg(short, long, help = "database to write match data to")]
     db: Option<PathBuf>,
+    #[arg(short, long, help = "database of cards to reference")]
+    cards_db: Option<PathBuf>,
+    #[arg(long, action = clap::ArgAction::SetTrue, help = "enable debug logging")]
+    debug: bool,
     #[arg(short, long, action = clap::ArgAction::SetTrue, help = "wait for new events on Player.log, useful if you are actively playing MTGA")]
     follow: bool,
 }
@@ -51,11 +55,21 @@ fn ctrl_c_channel() -> Result<Receiver<()>> {
 
 fn main() -> Result<()> {
     let args = Args::try_parse()?;
+    tracing_subscriber::fmt()
+        .with_max_level(if args.debug {
+            tracing::Level::DEBUG
+        } else {
+            tracing::Level::INFO
+        })
+        .init();
 
     let log_source = File::open(&args.player_log)?;
     let mut reader = BufReader::new(log_source);
     let mut processor = LogProcessor::new();
     let mut match_replay_builder = MatchReplayBuilder::new();
+    let cards_db = ap_core::cards::CardsDatabase::new(
+        &args.cards_db.unwrap_or("data/cards-full.json".into()),
+    )?;
     let follow = args.follow;
 
     let ctrl_c_rx = ctrl_c_channel()?;
@@ -88,7 +102,7 @@ fn main() -> Result<()> {
                                     let path = args.output_dir.join(format!("{}.json", match_replay.match_id));
                                     info!("Writing match replay to file: {}", path.clone().to_str().unwrap());
                                     if let Some(connection) = &mut connection {
-                                        match match_replay.write_to_db(connection) {
+                                        match match_replay.write_to_db(connection, &cards_db) {
                                             Ok(_) => {
                                                 info!("Match replay written to database");
                                             }
