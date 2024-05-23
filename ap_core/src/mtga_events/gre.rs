@@ -1,11 +1,12 @@
-
 use std::collections::HashMap;
 
+use crate::mtga_events::primitives::ResultListEntry;
+use crate::mtga_events::primitives::{
+    Action, Annotation, MulliganType, OptionPrompt, Player, PlayerDieRoll, Power, Prompt, Skin,
+    Stop, Target, Timer, Toughness, TurnInfo, Zone,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::mtga_events::primitives::ResultListEntry;
-use crate::mtga_events::primitives::{Action, Annotation, MulliganType, OptionPrompt, Player, PlayerDieRoll, Power, Prompt, Skin, Stop, Target, Timer, Toughness, TurnInfo, Zone};
-
 
 ///
 /// GRE refers to the server-side MTGA engine
@@ -32,10 +33,9 @@ macro_rules! wrapper {
             #[serde(flatten)]
             pub meta: GreMeta,
             #[serde(flatten)]
-            pub extra: HashMap<String, Value>
+            pub extra: HashMap<String, Value>,
         }
-
-    }
+    };
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -140,7 +140,6 @@ pub struct GreMeta {
     pub game_state_id: Option<i32>,
 }
 
-
 wrapper!(AssignDamageReqWrapper);
 wrapper!(AssignDamageConfirmationWrapper);
 wrapper!(OrderDamageConfirmationWrapper);
@@ -165,17 +164,31 @@ wrapper!(PayCostsReqWrapper);
 wrapper!(IntermissionReqWrapper, IntermissionReq, intermission_req);
 wrapper!(CastingTimeOptionsReqWrapper);
 wrapper!(ChooseStartingPlayerReqWrapper);
-wrapper!(SubmitTargetsRespWrapper, SubmitTargetsResp, submit_targets_resp);
+wrapper!(
+    SubmitTargetsRespWrapper,
+    SubmitTargetsResp,
+    submit_targets_resp
+);
 wrapper!(ConnectRespWrapper, ConnectResp, connect_resp);
-wrapper!(DieRollResultsRespWrapper, DieRollResultsResp, die_roll_results_resp);
-wrapper!(ActionsAvailableReqWrapper, ActionsAvailableReq, actions_available_req);
+wrapper!(
+    DieRollResultsRespWrapper,
+    DieRollResultsResp,
+    die_roll_results_resp
+);
+wrapper!(
+    ActionsAvailableReqWrapper,
+    ActionsAvailableReq,
+    actions_available_req
+);
 wrapper!(PromptReqWrapper, Prompt, prompt);
 wrapper!(SetSettingsRespWrapper, SetSettingsResp, set_settings_resp);
 wrapper!(QueuedStateMessageWrapper);
 wrapper!(TimerStateMessageWrapper);
-wrapper!(GameStateMessageWrapper, GameStateMessage, game_state_message);
-
-
+wrapper!(
+    GameStateMessageWrapper,
+    GameStateMessage,
+    game_state_message
+);
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -188,7 +201,6 @@ pub struct SelectNReqWrapper {
     #[serde(flatten)]
     pub meta: GreMeta,
 }
-
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -296,7 +308,7 @@ pub struct MulliganReq {
     pub mulligan_count: i32,
     #[serde(default)]
     #[serde(rename = "mulliganType")]
-    pub type_field: MulliganType
+    pub type_field: MulliganType,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

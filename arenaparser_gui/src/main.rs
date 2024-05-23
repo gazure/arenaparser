@@ -1,16 +1,17 @@
-use rusqlite::Connection;
 use anyhow::Result;
 use ap_core::cards::CardsDatabase;
-use serde_json;
-use ap_core::mtga_events::gre::DeckMessage;
 use ap_core::deck::Deck;
+use ap_core::mtga_events::gre::DeckMessage;
+use rusqlite::Connection;
+use serde_json;
 
 fn main() -> Result<()> {
     let cards_path = "data/cards-full.json";
     let cards_db = CardsDatabase::new(cards_path)?;
     let db_path = "data/matches.db";
     let conn = Connection::open(db_path)?;
-    let mut statement = conn.prepare("SELECT match_id, game_number, deck_cards, sideboard_cards FROM decks")?;
+    let mut statement =
+        conn.prepare("SELECT match_id, game_number, deck_cards, sideboard_cards FROM decks")?;
     let decks = statement.query_map([], |row| {
         let match_id: String = row.get(0)?;
         let game_number: i32 = row.get(1)?;

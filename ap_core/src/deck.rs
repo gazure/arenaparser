@@ -3,7 +3,6 @@ use crate::mtga_events::gre::DeckMessage;
 use std::collections::BTreeMap;
 use std::fmt::Display;
 
-
 fn format_list_of_cards(cards: &[String]) -> String {
     let mut card_quantities: BTreeMap<String, i32> = BTreeMap::new();
     cards.iter().for_each(|card| {
@@ -41,7 +40,11 @@ impl Display for Deck {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mainboard_str = format_list_of_cards(&self.mainboard);
         let sideboard_str = format_list_of_cards(&self.sideboard);
-        write!(f, "Deck: {}\n\n{}\n\nSideboard:\n{}", &self.name, mainboard_str, sideboard_str)
+        write!(
+            f,
+            "Deck: {}\n\n{}\n\nSideboard:\n{}",
+            &self.name, mainboard_str, sideboard_str
+        )
     }
 }
 

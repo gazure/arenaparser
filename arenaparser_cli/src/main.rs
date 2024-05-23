@@ -67,9 +67,8 @@ fn main() -> Result<()> {
     let mut reader = BufReader::new(log_source);
     let mut processor = LogProcessor::new();
     let mut match_replay_builder = MatchReplayBuilder::new();
-    let cards_db = ap_core::cards::CardsDatabase::new(
-        args.cards_db.unwrap_or("data/cards-full.json".into()),
-    )?;
+    let cards_db =
+        ap_core::cards::CardsDatabase::new(args.cards_db.unwrap_or("data/cards-full.json".into()))?;
     let follow = args.follow;
 
     let ctrl_c_rx = ctrl_c_channel()?;

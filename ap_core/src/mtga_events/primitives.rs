@@ -1,6 +1,6 @@
+use crate::mtga_events::gre::Reference;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-use crate::mtga_events::gre::Reference;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -356,7 +356,6 @@ pub struct TurnInfo {
     pub step: Option<Step>,
 }
 
-
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Zone {
@@ -435,7 +434,6 @@ impl Display for Phase {
         write!(f, "{:?}", self)
     }
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Step {

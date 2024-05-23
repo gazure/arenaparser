@@ -1,4 +1,3 @@
-
 #[derive(Debug, Default)]
 pub struct LogProcessor {
     current_json_str: Option<String>,
@@ -6,15 +5,14 @@ pub struct LogProcessor {
 }
 
 impl LogProcessor {
-    pub fn new(
-    ) -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 
     // try to find the json strings in the logs. ignoring all other info
     // purges whitespace from the internal json strings, but I don't think that will cause
     // any issues given the log entries I've read
-    pub fn process_line(&mut self, log_line: &str) -> Vec<String>{
+    pub fn process_line(&mut self, log_line: &str) -> Vec<String> {
         let mut completed_json_strings = Vec::new();
         for char in log_line.chars() {
             match char {

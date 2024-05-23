@@ -308,19 +308,22 @@ impl MatchReplay {
                     .join(",");
                 if let Some(mulligan_request) = mulligan_requests_iter.next() {
                     let game_state_id = mulligan_request.meta.game_state_id.unwrap();
-                    let number_to_keep = DEFAULT_HAND_SIZE - mulligan_request.mulligan_req.mulligan_count;
+                    let number_to_keep =
+                        DEFAULT_HAND_SIZE - mulligan_request.mulligan_req.mulligan_count;
                     let decision = match mulligan_responses.get(&game_state_id) {
                         Some(mulligan_response) => match mulligan_response.mulligan_resp.decision {
                             MulliganOption::AcceptHand => "Keep",
                             MulliganOption::Mulligan => "Mulligan",
                         },
                         None => "Match Ended",
-                    }.to_string();
+                    }
+                    .to_string();
                     let opp_identity = if game_number == 1 {
                         "Unknown"
                     } else {
                         &opponent_color_identity
-                    }.to_string();
+                    }
+                    .to_string();
 
                     let mulligan = MulliganInfoBuilder::default()
                         .match_id(self.match_id.clone())

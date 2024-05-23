@@ -116,9 +116,9 @@ impl MatchInsightDB {
     }
 
     pub fn get_match_results(&mut self, match_id: &str) -> Result<Vec<(i32, String)>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT game_number, result_scope FROM match_results WHERE match_id = ?1",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT game_number, result_scope FROM match_results WHERE match_id = ?1")?;
         let results = stmt
             .query_map([match_id], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<rusqlite::Result<Vec<(i32, String)>>>()?;
