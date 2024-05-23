@@ -18,6 +18,7 @@ anyhow = "1.0.82"
 crossbeam = "0.8.0"
 ctrlc = "3.4.4"
 clap = { version = "4.5.4", features = ["derive"] }
+derive_builder = "0.20.0"
 lazy_static = "1.4.0"
 notify = "6.1.1"
 encoding_rs = "0.8.34"

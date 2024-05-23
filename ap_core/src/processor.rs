@@ -1,18 +1,14 @@
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct LogProcessor {
     current_json_str: Option<String>,
     bracket_depth: usize,
 }
 
-// I have a crippling OOP addiction, don't I
 impl LogProcessor {
     pub fn new(
     ) -> Self {
-        Self {
-            current_json_str: None,
-            bracket_depth: 0,
-        }
+        Self::default()
     }
 
     // try to find the json strings in the logs. ignoring all other info

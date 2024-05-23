@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 
 
-fn format_list_of_cards(cards: &Vec<String>) -> String {
+fn format_list_of_cards(cards: &[String]) -> String {
     let mut card_quantities: BTreeMap<String, i32> = BTreeMap::new();
     cards.iter().for_each(|card| {
         *card_quantities.entry(card.clone()).or_insert(0) += 1;

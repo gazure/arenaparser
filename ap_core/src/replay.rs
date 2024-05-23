@@ -6,11 +6,11 @@ use std::vec::IntoIter;
 
 use anyhow::{anyhow, Result};
 use serde::{Serialize, Serializer};
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::arena_event_parser::ParseOutput;
 use crate::cards::CardsDatabase;
-use crate::match_insights::MatchInsightDB;
+use crate::match_insights::{MatchInsightDB, MulliganInfoBuilder};
 use crate::mtga_events::client::{
     ClientMessage, MulliganOption, MulliganRespWrapper, RequestTypeClientToMatchServiceMessage,
 };
@@ -20,6 +20,8 @@ use crate::mtga_events::gre::{
 };
 use crate::mtga_events::mgrsc::{FinalMatchResult, RequestTypeMGRSCEvent, StateType};
 use crate::mtga_events::primitives::ZoneType;
+
+const DEFAULT_HAND_SIZE: i32 = 7;
 
 fn write_line<T>(writer: &mut BufWriter<File>, line: &T) -> Result<()>
 where
@@ -222,13 +224,13 @@ impl MatchReplay {
                     {
                         if let Some(turn_info) = &gsm.turn_info {
                             if let Some(decision_player) = turn_info.decision_player {
-                                if decision_player == controller_id {
-                                    println!("game_number: {}, play_or_draw: Play", game_number);
-                                    play_or_draw.insert(game_number, "Play".to_string());
+                                let pd = if decision_player == controller_id {
+                                    "Play"
                                 } else {
-                                    println!("game_number: {}, play_or_draw: Draw", game_number);
-                                    play_or_draw.insert(game_number, "Draw".to_string());
-                                }
+                                    "Draw"
+                                };
+                                info!("game_number: {}, play_or_draw: Play", game_number);
+                                play_or_draw.insert(game_number, pd.to_string());
                             }
                         }
                     }
@@ -306,28 +308,31 @@ impl MatchReplay {
                     .join(",");
                 if let Some(mulligan_request) = mulligan_requests_iter.next() {
                     let game_state_id = mulligan_request.meta.game_state_id.unwrap();
-                    let number_to_keep = 7 - mulligan_request.mulligan_req.mulligan_count;
+                    let number_to_keep = DEFAULT_HAND_SIZE - mulligan_request.mulligan_req.mulligan_count;
                     let decision = match mulligan_responses.get(&game_state_id) {
                         Some(mulligan_response) => match mulligan_response.mulligan_resp.decision {
                             MulliganOption::AcceptHand => "Keep",
                             MulliganOption::Mulligan => "Mulligan",
                         },
                         None => "Match Ended",
-                    };
+                    }.to_string();
                     let opp_identity = if game_number == 1 {
                         "Unknown"
                     } else {
                         &opponent_color_identity
-                    };
-                    db.insert_mulligan_info(
-                        &self.match_id,
-                        game_number,
-                        number_to_keep,
-                        &hand_string,
-                        play_draw,
-                        opp_identity,
-                        decision,
-                    )?;
+                    }.to_string();
+
+                    let mulligan = MulliganInfoBuilder::default()
+                        .match_id(self.match_id.clone())
+                        .game_number(game_number)
+                        .number_to_keep(number_to_keep)
+                        .hand(hand_string)
+                        .play_draw(play_draw.clone())
+                        .opponent_identity(opp_identity)
+                        .decision(decision)
+                        .build()?;
+
+                    db.insert_mulligan_info(mulligan)?;
                 }
             }
         }
@@ -443,7 +448,7 @@ impl MatchReplayBuilder {
                 return true;
             }
             StateType::Playing => {
-                println!("found match: {}", match_id);
+                info!("found match: {}", match_id);
                 self.match_id = match_id;
                 self.match_start_message = mgrsc_event;
             }
