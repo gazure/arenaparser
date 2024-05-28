@@ -287,6 +287,10 @@ pub enum AnnotationType {
     DungeonStatus,
     #[serde(rename = "AnnotationType_TokenImmediatelyDied")]
     TokenImmediatelyDied,
+    #[serde(rename = "AnnotationType_ChoosingAttachments")]
+    ChoosingAttachments,
+    #[serde(rename = "AnnotationType_AbilityExhausted")]
+    AbilityExhausted,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

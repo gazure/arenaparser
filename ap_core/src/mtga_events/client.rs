@@ -511,4 +511,6 @@ pub enum ActionType {
     Pass,
     #[serde(rename = "ActionType_Special")]
     Special,
+    #[serde(rename = "ActionType_CastAdventure")]
+    CastAdventure,
 }
