@@ -1,12 +1,36 @@
-#[derive(Debug, Default)]
-pub struct LogProcessor {
+use std::collections::VecDeque;
+use anyhow::Result;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
+use tracing::error;
+
+use crate::mtga_events::client::RequestTypeClientToMatchServiceMessage;
+use crate::mtga_events::gre::RequestTypeGREToClientEvent;
+use crate::mtga_events::mgrsc::RequestTypeMGRSCEvent;
+
+pub trait ArenaEventSource {
+    fn get_next_event(&mut self) -> Option<ParseOutput>;
+
+}
+
+#[derive(Debug)]
+pub struct PlayerLogProcessor {
+    player_log_reader: BufReader<File>,
+    json_events: VecDeque<String>,
     current_json_str: Option<String>,
     bracket_depth: usize,
 }
 
-impl LogProcessor {
-    pub fn new() -> Self {
-        Self::default()
+impl PlayerLogProcessor {
+    pub fn try_new(player_log_path: PathBuf) -> Result<Self> {
+        let reader = BufReader::new(File::open(&player_log_path)?);
+        Ok(Self {
+            player_log_reader: reader,
+            json_events: VecDeque::new(),
+            current_json_str: None,
+            bracket_depth: 0,
+        })
     }
 
     // try to find the json strings in the logs. ignoring all other info
@@ -42,5 +66,62 @@ impl LogProcessor {
             }
         }
         completed_json_strings
+    }
+
+    fn process_lines(&mut self) {
+        let mut lines = Vec::new();
+        loop {
+            let mut line = String::new();
+            match self.player_log_reader.read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) => lines.push(line),
+                Err(e) => {
+                    error!("Error reading line: {:?}", e);
+                    break;
+                }
+            }
+        }
+        for line in lines {
+            let json_strings = self.process_line(&line);
+            self.json_events.extend(json_strings);
+        }
+    }
+}
+
+impl ArenaEventSource for PlayerLogProcessor {
+    fn get_next_event(&mut self) -> Option<ParseOutput> {
+        self.process_lines();
+        if let Some(json_str) = self.json_events.pop_front() {
+            Some(parse(&json_str).unwrap_or_else(|e| {
+                error!("Error parsing event: {}", e);
+                ParseOutput::NoEvent
+            }))
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ParseOutput {
+    GREMessage(RequestTypeGREToClientEvent),
+    ClientMessage(RequestTypeClientToMatchServiceMessage),
+    MGRSCMessage(RequestTypeMGRSCEvent),
+    NoEvent,
+}
+
+pub fn parse(event: &str) -> Result<ParseOutput> {
+    if event.contains("clientToMatchServiceMessage") {
+        let client_to_match_service_message: RequestTypeClientToMatchServiceMessage =
+            serde_json::from_str(event)?;
+        Ok(ParseOutput::ClientMessage(client_to_match_service_message))
+    } else if event.contains("matchGameRoomStateChangedEvent") {
+        let mgrsc_event: RequestTypeMGRSCEvent = serde_json::from_str(event)?;
+        Ok(ParseOutput::MGRSCMessage(mgrsc_event))
+    } else if event.contains("greToClientEvent") {
+        let request_gre_to_client_event: RequestTypeGREToClientEvent = serde_json::from_str(event)?;
+        Ok(ParseOutput::GREMessage(request_gre_to_client_event))
+    } else {
+        Ok(ParseOutput::NoEvent)
     }
 }

@@ -291,6 +291,10 @@ pub enum AnnotationType {
     ChoosingAttachments,
     #[serde(rename = "AnnotationType_AbilityExhausted")]
     AbilityExhausted,
+    #[serde(rename = "AnnotationType_ModifiedName")]
+    ModifiedName,
+    #[serde(rename = "AnnotationType_ControllerChanged")]
+    ControllerChanged,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

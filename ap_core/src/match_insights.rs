@@ -5,6 +5,10 @@ use include_dir::{include_dir, Dir};
 use lazy_static::lazy_static;
 use rusqlite::{Connection, Params as RusqliteParams, Result as RusqliteResult};
 use rusqlite_migration::Migrations;
+use tracing::info;
+use crate::cards::CardsDatabase;
+use crate::replay::MatchReplay;
+use crate::storage_backends::ArenaMatchStorageBackend;
 
 static MIGRATIONS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/migrations");
 
@@ -13,7 +17,7 @@ lazy_static! {
         Migrations::from_directory(&MIGRATIONS_DIR).unwrap();
 }
 
-#[derive(Debug, Builder)]
+#[derive(Debug, Clone, Builder)]
 pub struct MulliganInfo {
     pub match_id: String,
     pub game_number: i32,
@@ -27,11 +31,12 @@ pub struct MulliganInfo {
 #[derive(Debug)]
 pub struct MatchInsightDB {
     pub conn: Connection,
+    pub cards_database: CardsDatabase,
 }
 
 impl MatchInsightDB {
-    pub fn new(conn: Connection) -> Self {
-        Self { conn }
+    pub fn new(conn: Connection, cards_database: CardsDatabase) -> Self {
+        Self { conn, cards_database }
     }
     pub fn init(&mut self) -> Result<()> {
         MIGRATIONS.to_latest(&mut self.conn)?;
@@ -123,5 +128,60 @@ impl MatchInsightDB {
             .query_map([match_id], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<rusqlite::Result<Vec<(i32, String)>>>()?;
         Ok(results)
+    }
+
+    fn persist_mulligans(&mut self, match_replay: &MatchReplay) -> Result<()> {
+        let mulligan_infos = match_replay.get_mulligan_infos(&self.cards_database)?;
+        mulligan_infos.iter().try_for_each(|mulligan_info| {
+            self.insert_mulligan_info(mulligan_info.clone())
+        })?;
+        Ok(())
+    }
+}
+
+
+impl ArenaMatchStorageBackend for MatchInsightDB {
+    fn write(&mut self, match_replay: &MatchReplay) -> Result<()> {
+        // TODO: move write_to_db out of match_replay
+        info!("Writing match replay to database");
+        // write match replay to database
+        let controller_seat_id = match_replay.get_controller_seat_id()?;
+        let match_id = &match_replay.match_id;
+        let (controller_name, opponent_name) = match_replay.get_player_names(controller_seat_id)?;
+
+        self.insert_match(
+            match_id,
+            controller_seat_id,
+            &controller_name,
+            &opponent_name,
+        )?;
+
+        let decklists = match_replay.get_decklists()?;
+        for (game_number, deck) in decklists.iter().enumerate() {
+            self.insert_deck(&match_replay.match_id, (game_number + 1) as i32, deck)?;
+        }
+
+        self.persist_mulligans(match_replay)?;
+
+        // not too keen on this data model
+        let match_results = match_replay.get_match_results()?;
+        for (i, result) in match_results.result_list.iter().enumerate() {
+            if result.scope == "MatchScope_Game" {
+                self.insert_match_result(
+                    match_id,
+                    Some((i + 1) as i32),
+                    result.winning_team_id,
+                    result.scope.clone(),
+                )?;
+            } else {
+                self.insert_match_result(
+                    match_id,
+                    None,
+                    result.winning_team_id,
+                    result.scope.clone(),
+                )?;
+            }
+        }
+        Ok(())
     }
 }

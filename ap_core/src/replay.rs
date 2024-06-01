@@ -8,9 +8,8 @@ use anyhow::{anyhow, Result};
 use serde::{Serialize, Serializer};
 use tracing::{debug, info};
 
-use crate::arena_event_parser::ParseOutput;
 use crate::cards::CardsDatabase;
-use crate::match_insights::{MatchInsightDB, MulliganInfoBuilder};
+use crate::match_insights::{MulliganInfo, MulliganInfoBuilder};
 use crate::mtga_events::client::{
     ClientMessage, MulliganOption, MulliganRespWrapper, RequestTypeClientToMatchServiceMessage,
 };
@@ -20,6 +19,7 @@ use crate::mtga_events::gre::{
 };
 use crate::mtga_events::mgrsc::{FinalMatchResult, RequestTypeMGRSCEvent, StateType};
 use crate::mtga_events::primitives::ZoneType;
+use crate::processor::ParseOutput;
 
 const DEFAULT_HAND_SIZE: i32 = 7;
 
@@ -109,7 +109,7 @@ impl MatchReplay {
                 _ => None,
             })
     }
-    fn get_controller_seat_id(&self) -> Result<i32> {
+    pub(crate) fn get_controller_seat_id(&self) -> Result<i32> {
         for gre_message in self.gre_messages_iter() {
             if let GREToClientMessage::ConnectResp(wrapper) = gre_message {
                 return Ok(wrapper.meta.system_seat_ids[0]);
@@ -118,7 +118,7 @@ impl MatchReplay {
         Err(anyhow!("Controller seat ID not found"))
     }
 
-    fn get_player_names(&self, seat_id: i32) -> Result<(String, String)> {
+    pub(crate) fn get_player_names(&self, seat_id: i32) -> Result<(String, String)> {
         if let Some(players) = &self.match_start_message.mgrsc_event.game_room_info.players {
             let controller = players
                 .iter()
@@ -167,7 +167,7 @@ impl MatchReplay {
         Ok(color_identity.into_iter().collect::<Vec<_>>().join(""))
     }
 
-    fn get_match_results(&self) -> Result<FinalMatchResult> {
+    pub(crate) fn get_match_results(&self) -> Result<FinalMatchResult> {
         self.match_end_message
             .mgrsc_event
             .game_room_info
@@ -196,13 +196,13 @@ impl MatchReplay {
         decklists
     }
 
-    fn get_decklists(&self) -> Result<Vec<DeckMessage>> {
+    pub(crate) fn get_decklists(&self) -> Result<Vec<DeckMessage>> {
         let mut decklists = vec![self.get_initial_decklist()?];
         decklists.append(&mut self.get_sideboarded_decklists());
         Ok(decklists)
     }
 
-    fn persist_mulligans(&self, db: &mut MatchInsightDB, cards_db: &CardsDatabase) -> Result<()> {
+    pub fn get_mulligan_infos(&self, cards_db: &CardsDatabase) -> Result<Vec<MulliganInfo>> {
         let controller_id = self.get_controller_seat_id()?;
 
         let mut game_number = 1;
@@ -288,6 +288,7 @@ impl MatchReplay {
             })
             .collect();
 
+        let mut mulligan_infos = Vec::new();
         for (game_number, hands) in opening_hands {
             let mut mulligan_requests_iter = mulligan_requests
                 .get(&game_number)
@@ -335,53 +336,12 @@ impl MatchReplay {
                         .decision(decision)
                         .build()?;
 
-                    db.insert_mulligan_info(mulligan)?;
+                    mulligan_infos.push(mulligan);
                 }
             }
         }
 
-        Ok(())
-    }
-
-    pub fn write_to_db(&self, conn: &mut MatchInsightDB, cards_db: &CardsDatabase) -> Result<()> {
-        // write match replay to database
-        let controller_seat_id = self.get_controller_seat_id()?;
-        let (controller_name, opponent_name) = self.get_player_names(controller_seat_id)?;
-
-        conn.insert_match(
-            &self.match_id,
-            controller_seat_id,
-            &controller_name,
-            &opponent_name,
-        )?;
-
-        let decklists = self.get_decklists()?;
-        for (game_number, deck) in decklists.iter().enumerate() {
-            conn.insert_deck(&self.match_id, (game_number + 1) as i32, deck)?;
-        }
-
-        self.persist_mulligans(conn, cards_db)?;
-
-        // not too keen on this data model
-        let match_results = self.get_match_results()?;
-        for (i, result) in match_results.result_list.iter().enumerate() {
-            if result.scope == "MatchScope_Game" {
-                conn.insert_match_result(
-                    &self.match_id,
-                    Some((i + 1) as i32),
-                    result.winning_team_id,
-                    result.scope.clone(),
-                )?;
-            } else {
-                conn.insert_match_result(
-                    &self.match_id,
-                    None,
-                    result.winning_team_id,
-                    result.scope.clone(),
-                )?;
-            }
-        }
-        Ok(())
+        Ok(mulligan_infos)
     }
 }
 
@@ -421,6 +381,7 @@ impl MatchReplayBuilder {
     }
 
     pub fn ingest_event(&mut self, event: ParseOutput) -> bool {
+        debug!("ingesting event: {:?}", event);
         match event {
             ParseOutput::GREMessage(gre_message) => self
                 .client_server_messages

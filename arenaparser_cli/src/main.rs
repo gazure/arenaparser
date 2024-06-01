@@ -1,47 +1,32 @@
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::Result;
-use ap_core::arena_event_parser;
-use ap_core::match_insights::MatchInsightDB;
-use ap_core::processor::LogProcessor;
-use ap_core::replay::MatchReplayBuilder;
 use clap::Parser;
 use crossbeam::channel::{select, unbounded, Receiver};
-use tracing::{error, info};
 
-fn get_log_lines(reader: &mut impl BufRead) -> Vec<String> {
-    // read lines from reader
-    let mut lines = Vec::new();
-    loop {
-        let mut line = String::new();
-        match reader.read_line(&mut line) {
-            Ok(0) => break,
-            Ok(_) => lines.push(line),
-            Err(e) => {
-                error!("Error reading line: {:?}", e);
-                break;
-            }
-        }
-    }
-    lines
-}
+use ap_core::match_insights::MatchInsightDB;
+use ap_core::processor::{ArenaEventSource, PlayerLogProcessor};
+use ap_core::replay::MatchReplayBuilder;
+use ap_core::storage_backends::{ArenaMatchStorageBackend, DirectoryStorageBackend};
+
+
 #[derive(Debug, Parser)]
 #[command(about = "Tries to scrape useful data from mtga detailed logs")]
 struct Args {
     #[arg(short, long, help = "Location of Player.log file")]
     player_log: PathBuf,
     #[arg(short, long, help = "directory to write replay output files")]
-    output_dir: PathBuf,
+    output_dir: Option<PathBuf>,
     #[arg(short, long, help = "database to write match data to")]
     db: Option<PathBuf>,
     #[arg(short, long, help = "database of cards to reference")]
     cards_db: Option<PathBuf>,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "enable debug logging")]
     debug: bool,
-    #[arg(short, long, action = clap::ArgAction::SetTrue, help = "wait for new events on Player.log, useful if you are actively playing MTGA")]
+    #[arg(
+        short, long, action = clap::ArgAction::SetTrue, help = "wait for new events on Player.log, useful if you are actively playing MTGA"
+    )]
     follow: bool,
 }
 
@@ -63,23 +48,26 @@ fn main() -> Result<()> {
         })
         .init();
 
-    let log_source = File::open(&args.player_log)?;
-    let mut reader = BufReader::new(log_source);
-    let mut processor = LogProcessor::new();
+    let mut processor = PlayerLogProcessor::try_new(args.player_log)?;
     let mut match_replay_builder = MatchReplayBuilder::new();
+    let mut storage_backends: Vec<Box<dyn ArenaMatchStorageBackend>> = Vec::new();
     let cards_db =
         ap_core::cards::CardsDatabase::new(args.cards_db.unwrap_or("data/cards-full.json".into()))?;
     let follow = args.follow;
 
     let ctrl_c_rx = ctrl_c_channel()?;
-    let mut connection = if let Some(db_path) = args.db {
+    if let Some(output_dir) = args.output_dir {
+        std::fs::create_dir_all(&output_dir)?;
+        storage_backends.push(Box::new(DirectoryStorageBackend::new(output_dir)));
+    }
+
+    if let Some(db_path) = args.db {
         let conn = rusqlite::Connection::open(db_path)?;
-        let mut db = MatchInsightDB::new(conn);
+        let mut db = MatchInsightDB::new(conn, cards_db);
         db.init()?;
-        Some(db)
-    } else {
-        None
-    };
+        storage_backends.push(Box::new(db));
+    }
+
 
     loop {
         select! {
@@ -88,38 +76,14 @@ fn main() -> Result<()> {
             }
             // notify crate doesn't fully capture fs events like I want it to
             default(Duration::from_secs(1)) => {
-                // TODO: consider making this more iterator-y
-                let log_lines = get_log_lines(&mut reader);
-                for line in log_lines {
-                    let json_lines = processor.process_line(&line);
-                    for json_line in json_lines {
-                        let parse_output= arena_event_parser::parse(&json_line);
-                        match parse_output {
-                            Ok(arena_event) => {
-                                if match_replay_builder.ingest_event(arena_event) {
-                                    let match_replay = match_replay_builder.build()?;
-                                    let path = args.output_dir.join(format!("{}.json", match_replay.match_id));
-                                    info!("Writing match replay to file: {}", path.clone().to_str().unwrap());
-                                    if let Some(connection) = &mut connection {
-                                        match match_replay.write_to_db(connection, &cards_db) {
-                                            Ok(_) => {
-                                                info!("Match replay written to database");
-                                            }
-                                            Err(e) => {
-                                                error!("Error writing match replay to database: {}", e);
-                                            }
-                                        }
-                                    }
+                while let Some(parse_output) = processor.get_next_event() {
+                    if match_replay_builder.ingest_event(parse_output) {
 
-                                    match_replay.write(path)?;
-                                    info!("Match replay written to file");
-                                    match_replay_builder = MatchReplayBuilder::new();
-                                }
-                            }
-                            Err(e) => {
-                                error!("Error parsing event: {}", e);
-                            }
+                        let match_replay = match_replay_builder.build()?;
+                        for backend in &mut storage_backends {
+                            backend.write(&match_replay)?;
                         }
+                        match_replay_builder = MatchReplayBuilder::new();
                     }
                 }
                 if !follow {
