@@ -295,6 +295,8 @@ pub enum AnnotationType {
     ModifiedName,
     #[serde(rename = "AnnotationType_ControllerChanged")]
     ControllerChanged,
+    #[serde(rename = "AnnotationType_TemporaryPermanent")]
+    TemporaryPermanent,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

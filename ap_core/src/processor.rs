@@ -1,5 +1,5 @@
-use std::collections::VecDeque;
 use anyhow::Result;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -11,7 +11,6 @@ use crate::mtga_events::mgrsc::RequestTypeMGRSCEvent;
 
 pub trait ArenaEventSource {
     fn get_next_event(&mut self) -> Option<ParseOutput>;
-
 }
 
 #[derive(Debug)]
@@ -24,7 +23,7 @@ pub struct PlayerLogProcessor {
 
 impl PlayerLogProcessor {
     pub fn try_new(player_log_path: PathBuf) -> Result<Self> {
-        let reader = BufReader::new(File::open(&player_log_path)?);
+        let reader = BufReader::new(File::open(player_log_path)?);
         Ok(Self {
             player_log_reader: reader,
             json_events: VecDeque::new(),
@@ -91,14 +90,12 @@ impl PlayerLogProcessor {
 impl ArenaEventSource for PlayerLogProcessor {
     fn get_next_event(&mut self) -> Option<ParseOutput> {
         self.process_lines();
-        if let Some(json_str) = self.json_events.pop_front() {
-            Some(parse(&json_str).unwrap_or_else(|e| {
+        self.json_events.pop_front().map(|json_str| {
+            parse(&json_str).unwrap_or_else(|e| {
                 error!("Error parsing event: {}", e);
                 ParseOutput::NoEvent
-            }))
-        } else {
-            None
-        }
+            })
+        })
     }
 }
 

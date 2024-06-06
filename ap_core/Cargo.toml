@@ -20,3 +20,4 @@ serde_json = { workspace = true }
 rusqlite = { workspace = true, features = ["bundled"] }
 tracing = { workspace = true }
 rusqlite_migration = { workspace = true, features = ["from-directory"] }
+chrono = "0.4.38"

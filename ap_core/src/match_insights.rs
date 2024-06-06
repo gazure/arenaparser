@@ -54,11 +54,13 @@ impl MatchInsightDB {
         name: &str,
         opp_name: &str,
     ) -> Result<()> {
+        let now = chrono::Utc::now();
+
         self.conn.execute(
             "INSERT INTO matches \
-            (id, controller_seat_id, controller_player_name, opponent_player_name)\
-            VALUES (?1, ?2, ?3, ?4) ON CONFLICT(id) DO NOTHING",
-            (id, seat_id, name, opp_name),
+            (id, controller_seat_id, controller_player_name, opponent_player_name, created_at)\
+            VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(id) DO NOTHING",
+            (id, seat_id, name, opp_name, now),
         )?;
         Ok(())
     }
@@ -142,9 +144,7 @@ impl MatchInsightDB {
 
 impl ArenaMatchStorageBackend for MatchInsightDB {
     fn write(&mut self, match_replay: &MatchReplay) -> Result<()> {
-        // TODO: move write_to_db out of match_replay
         info!("Writing match replay to database");
-        // write match replay to database
         let controller_seat_id = match_replay.get_controller_seat_id()?;
         let match_id = &match_replay.match_id;
         let (controller_name, opponent_name) = match_replay.get_player_names(controller_seat_id)?;

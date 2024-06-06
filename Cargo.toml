@@ -31,6 +31,6 @@ eframe = { version = "0.27.2", features = [
     "__screenshot", # __screenshot is so we can dump a screenshot using EFRAME_SCREENSHOT_TO
 ] }
 rfd = "0.14.1"
-rusqlite = { version = "0.31.0", features = ["bundled"] }
+rusqlite = { version = "0.31.0", features = ["bundled", "chrono"] }
 rusqlite_migration = { version = "1.2.0", features = ["from-directory"] }
 include_dir = "0.7.3"
