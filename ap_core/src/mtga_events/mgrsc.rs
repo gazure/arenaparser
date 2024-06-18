@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 ///
 /// Every match should emit 2 of these logs to indicate the start and end of a match
-/// though the start of a match is usually after the ConnectResp GRE message with the
+/// though the start of a match is usually after the `ConnectResp` GRE message with the
 /// player's decklist, so something keep in mind
 ///
 ///
@@ -26,13 +26,11 @@ pub struct MatchGameRoomStateChangedEvent {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GameRoomInfo {
-    #[serde(rename = "gameRoomConfig")]
     pub game_room_config: GameRoomConfig,
     pub players: Option<Vec<MatchPlayer>>,
-    #[serde(rename = "finalMatchResult")]
     pub final_match_result: Option<FinalMatchResult>,
-    #[serde(rename = "stateType")]
     pub state_type: StateType,
 }
 

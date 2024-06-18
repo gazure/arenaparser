@@ -22,6 +22,10 @@ pub struct PlayerLogProcessor {
 }
 
 impl PlayerLogProcessor {
+
+    /// # Errors
+    ///
+    /// Will return an error if the player log file cannot be opened
     pub fn try_new(player_log_path: PathBuf) -> Result<Self> {
         let reader = BufReader::new(File::open(player_log_path)?);
         Ok(Self {
@@ -43,7 +47,9 @@ impl PlayerLogProcessor {
                     if self.current_json_str.is_none() {
                         self.current_json_str = Some(String::new());
                     }
-                    self.current_json_str.as_mut().unwrap().push('{');
+                    if let Some(json_str) = &mut self.current_json_str {
+                        json_str.push('{');
+                    }
                     self.bracket_depth += 1;
                 }
                 '}' => {
@@ -107,6 +113,9 @@ pub enum ParseOutput {
     NoEvent,
 }
 
+/// # Errors
+///
+/// Errors if event appears to be a relevant json string, but does not decode properly
 pub fn parse(event: &str) -> Result<ParseOutput> {
     if event.contains("clientToMatchServiceMessage") {
         let client_to_match_service_message: RequestTypeClientToMatchServiceMessage =

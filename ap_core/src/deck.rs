@@ -1,8 +1,8 @@
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Display;
-use serde::{Deserialize, Serialize};
 
 use crate::mtga_events::gre::DeckMessage;
 
@@ -40,12 +40,12 @@ impl Display for Deck {
             &self
                 .mainboard
                 .iter()
-                .map(|i| i.to_string())
+                .map(ToString::to_string)
                 .fold(String::new(), |acc, i| acc + &i + "\n"),
             &self
                 .sideboard
                 .iter()
-                .map(|i| i.to_string())
+                .map(ToString::to_string)
                 .fold(String::new(), |acc, i| acc + &i + "\n")
         )
     }
@@ -81,12 +81,13 @@ impl Deck {
     }
 }
 
-fn quantities(deck: &[i32]) -> HashMap<i32, u16> {
+pub fn quantities(deck: &[i32]) -> HashMap<i32, u16> {
     deck.iter()
         .unique()
-        .cloned()
+        .copied()
         .map(|card_id| {
-            let quantity = deck.iter().filter(|&id| *id == card_id).count() as u16;
+            let quantity =
+                u16::try_from(deck.iter().filter(|&id| *id == card_id).count()).unwrap_or(0);
             (card_id, quantity)
         })
         .collect()
@@ -97,13 +98,12 @@ fn process_raw_decklist(raw_decklist: &str) -> Vec<i32> {
     match parsed {
         Value::Array(arr) => arr
             .iter()
-            .filter_map(|v| v.as_i64())
-            .map(|v| v as i32)
+            .filter_map(Value::as_i64)
+            .filter_map(|v| i32::try_from(v).ok())
             .collect(),
         _ => Vec::new(),
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -126,7 +126,8 @@ mod tests {
 
     #[test]
     fn test_deck_from_raw_decklist() {
-        let deck = super::Deck::from_raw_decklist("Test Deck".to_string(), 0, "[1, 2, 3]", "[4, 5, 6]");
+        let deck =
+            super::Deck::from_raw_decklist("Test Deck".to_string(), 0, "[1, 2, 3]", "[4, 5, 6]");
         assert_eq!(deck.name, "Test Deck");
         assert_eq!(deck.game_number, 0);
         assert_eq!(deck.mainboard, vec![1, 2, 3]);
@@ -137,7 +138,10 @@ mod tests {
     fn test_deck_display() {
         let deck = super::Deck::new("Test Deck".to_string(), 0, vec![1, 2, 3], vec![4, 5, 6]);
         let display = format!("{}", deck);
-        assert_eq!(display, "Test Deck\nMainboard:\n1\n2\n3\n\nSideboard:\n4\n5\n6\n");
+        assert_eq!(
+            display,
+            "Test Deck\nMainboard:\n1\n2\n3\n\nSideboard:\n4\n5\n6\n"
+        );
     }
 
     #[test]
@@ -168,7 +172,12 @@ mod tests {
 
     #[test]
     fn test_deck_quantities() {
-        let deck = super::Deck::new("Test Deck".to_string(), 0, vec![1, 2, 3, 1, 2, 3, 1, 2, 3, 4], vec![4, 5, 6]);
+        let deck = super::Deck::new(
+            "Test Deck".to_string(),
+            0,
+            vec![1, 2, 3, 1, 2, 3, 1, 2, 3, 4],
+            vec![4, 5, 6],
+        );
         let quantities = deck.quantities();
         assert_eq!(quantities.get(&1), Some(&3));
         assert_eq!(quantities.get(&2), Some(&3));
@@ -178,7 +187,12 @@ mod tests {
 
     #[test]
     fn test_deck_sideboard_quantities() {
-        let deck = super::Deck::new("Test Deck".to_string(), 0, vec![1, 2, 3, 1, 2, 3, 1, 2, 3, 4], vec![4, 5, 6]);
+        let deck = super::Deck::new(
+            "Test Deck".to_string(),
+            0,
+            vec![1, 2, 3, 1, 2, 3, 1, 2, 3, 4],
+            vec![4, 5, 6],
+        );
         let quantities = deck.sideboard_quantities();
         assert_eq!(quantities.get(&4), Some(&1));
         assert_eq!(quantities.get(&5), Some(&1));

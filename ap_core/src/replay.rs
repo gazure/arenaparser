@@ -6,7 +6,7 @@ use std::vec::IntoIter;
 
 use anyhow::{anyhow, Result};
 use serde::{Serialize, Serializer};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::cards::CardsDatabase;
 use crate::deck::Deck;
@@ -69,11 +69,15 @@ impl<'a> Serialize for MatchReplayEventRef<'a> {
 }
 
 impl MatchReplay {
+
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be created or written to
     pub fn write(&self, path: PathBuf) -> Result<()> {
         let file = File::create(path)?;
         let mut writer = BufWriter::new(file);
 
-        for match_item in self.into_iter() {
+        for match_item in self {
             write_line(&mut writer, &match_item)?;
         }
         Ok(())
@@ -110,6 +114,11 @@ impl MatchReplay {
                 _ => None,
             })
     }
+
+
+    /// # Errors
+    ///
+    /// Returns an error if the controller seat ID is not found
     pub(crate) fn get_controller_seat_id(&self) -> Result<i32> {
         for gre_message in self.gre_messages_iter() {
             if let GREToClientMessage::ConnectResp(wrapper) = gre_message {
@@ -119,6 +128,9 @@ impl MatchReplay {
         Err(anyhow!("Controller seat ID not found"))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the player names are not found
     pub(crate) fn get_player_names(&self, seat_id: i32) -> Result<(String, String)> {
         if let Some(players) = &self.match_start_message.mgrsc_event.game_room_info.players {
             let controller = players
@@ -136,6 +148,9 @@ impl MatchReplay {
         Err(anyhow!("player names not found"))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the controller seat ID is not found
     fn get_opponent_cards(&self) -> Result<Vec<i32>> {
         let controller_id = self.get_controller_seat_id()?;
         let opponent_cards = self
@@ -151,6 +166,9 @@ impl MatchReplay {
         Ok(opponent_cards)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the controller seat id is not found
     fn get_opponent_color_identity(&self, cards_db: &CardsDatabase) -> Result<String> {
         let opponent_cards = self.get_opponent_cards()?;
         let mut color_identity = BTreeSet::new();
@@ -165,10 +183,13 @@ impl MatchReplay {
                 color_identity.extend(colors);
             }
         }
-        Ok(color_identity.into_iter().collect::<Vec<_>>().join(""))
+        Ok(color_identity.into_iter().collect::<String>())
     }
 
-    pub(crate) fn get_match_results(&self) -> Result<FinalMatchResult> {
+    /// # Errors
+    ///
+    /// Returns an error if the match results are not found
+    pub fn get_match_results(&self) -> Result<FinalMatchResult> {
         self.match_end_message
             .mgrsc_event
             .game_room_info
@@ -177,6 +198,9 @@ impl MatchReplay {
             .ok_or(anyhow!("Match results not found"))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if there is no `ConnectResp` in the GRE events
     fn get_initial_decklist(&self) -> Result<DeckMessage> {
         for gre_message in self.gre_messages_iter() {
             if let GREToClientMessage::ConnectResp(wrapper) = gre_message {
@@ -197,7 +221,11 @@ impl MatchReplay {
         decklists
     }
 
-    pub(crate) fn get_decklists(&self) -> Result<Vec<Deck>> {
+
+    /// # Errors
+    ///
+    /// Returns an Error if the initial decklist is not found
+    pub fn get_decklists(&self) -> Result<Vec<Deck>> {
         let mut decklists = vec![self.get_initial_decklist()?];
         decklists.append(&mut self.get_sideboarded_decklists());
         Ok(decklists
@@ -205,12 +233,20 @@ impl MatchReplay {
             .map(|deck| -> Deck  {deck.into()})
             .enumerate()
             .map(|(i, mut deck)| {
-                deck.game_number = i as i32 + 1;
+                deck.game_number = i32::try_from(i).unwrap_or_else(|e| {
+                    warn!("Error converting usize to i32: {}", e);
+                    0
+                }) + 1;
                 deck
             })
             .collect())
     }
 
+
+    /// # Errors
+    ///
+    /// Returns an error if the controller seat ID is not found among other things
+    #[allow(clippy::too_many_lines)]
     pub fn get_mulligan_infos(&self, cards_db: &CardsDatabase) -> Result<Vec<MulliganInfo>> {
         let controller_id = self.get_controller_seat_id()?;
 
@@ -262,9 +298,10 @@ impl MatchReplay {
                             .game_objects
                             .iter()
                             .filter(|go| {
-                                go.zone_id.is_some()
-                                    && go.zone_id.unwrap() == controller_hand_zone_id
-                                    && go.type_field == GameObjectType::Card
+                                let Some(zone_id) = go.zone_id else {
+                                    return false;
+                                };
+                                zone_id == controller_hand_zone_id && go.type_field == GameObjectType::Card
                             })
                             .map(|go| go.grp_id)
                             .collect();
@@ -313,44 +350,53 @@ impl MatchReplay {
             for hand in hands {
                 let hand_string = hand
                     .iter()
-                    .map(|grp_id| grp_id.to_string())
+                    .map(std::string::ToString::to_string)
                     .collect::<Vec<String>>()
                     .join(",");
-                if let Some(mulligan_request) = mulligan_requests_iter.next() {
-                    let game_state_id = mulligan_request.meta.game_state_id.unwrap();
-                    let number_to_keep =
-                        DEFAULT_HAND_SIZE - mulligan_request.mulligan_req.mulligan_count;
-                    let decision = match mulligan_responses.get(&game_state_id) {
-                        Some(mulligan_response) => match mulligan_response.mulligan_resp.decision {
-                            MulliganOption::AcceptHand => "Keep",
-                            MulliganOption::Mulligan => "Mulligan",
-                        },
-                        None => "Match Ended",
-                    }
-                    .to_string();
-                    let opp_identity = if game_number == 1 {
-                        "Unknown"
-                    } else {
-                        &opponent_color_identity
-                    }
-                    .to_string();
-
-                    let mulligan = MulliganInfoBuilder::default()
-                        .match_id(self.match_id.clone())
-                        .game_number(game_number)
-                        .number_to_keep(number_to_keep)
-                        .hand(hand_string)
-                        .play_draw(play_draw.clone())
-                        .opponent_identity(opp_identity)
-                        .decision(decision)
-                        .build()?;
-
-                    mulligan_infos.push(mulligan);
+                let Some(mulligan_request) = mulligan_requests_iter.next() else {
+                    warn!("No mulligan request found for game {}", game_number);
+                    continue;
+                };
+                let Some(game_state_id) = mulligan_request.meta.game_state_id else {
+                    warn!("No game state ID found for mulligan request");
+                    continue;
+                };
+                let number_to_keep =
+                    DEFAULT_HAND_SIZE - mulligan_request.mulligan_req.mulligan_count;
+                let decision = match mulligan_responses.get(&game_state_id) {
+                    Some(mulligan_response) => match mulligan_response.mulligan_resp.decision {
+                        MulliganOption::AcceptHand => "Keep",
+                        MulliganOption::Mulligan => "Mulligan",
+                    },
+                    None => "Match Ended",
                 }
+                .to_string();
+                let opp_identity = if game_number == 1 {
+                    "Unknown"
+                } else {
+                    &opponent_color_identity
+                }
+                .to_string();
+
+                let mulligan = MulliganInfoBuilder::default()
+                    .match_id(self.match_id.clone())
+                    .game_number(game_number)
+                    .number_to_keep(number_to_keep)
+                    .hand(hand_string)
+                    .play_draw(play_draw.clone())
+                    .opponent_identity(opp_identity)
+                    .decision(decision)
+                    .build()?;
+
+                mulligan_infos.push(mulligan);
             }
         }
 
         Ok(mulligan_infos)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = MatchReplayEventRef> {
+        self.into_iter()
     }
 }
 
@@ -429,6 +475,10 @@ impl MatchReplayBuilder {
         false
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the builder is missing key information
+    /// except it doesn't right now, so don't worry about it
     pub fn build(self) -> Result<MatchReplay> {
         // TODO: add some Err states to this
         let match_replay = MatchReplay {

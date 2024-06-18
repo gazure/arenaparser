@@ -20,6 +20,10 @@ pub struct CardDbEntry {
 }
 
 impl CardsDatabase {
+
+    /// # Errors
+    ///
+    /// Will return an error if the database file cannot be opened or if the database file is not valid JSON
     pub fn new(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let cards_db_file = File::open(path)?;
         let cards_db_reader = BufReader::new(cards_db_file);
@@ -28,6 +32,9 @@ impl CardsDatabase {
         Ok(Self { db: cards_db })
     }
 
+    /// # Errors
+    ///
+    /// Will return an error if the card cannot be found in the database
     pub fn get_pretty_name<T>(&self, grp_id: &T) -> anyhow::Result<String>
     where
         T: Display + ?Sized,

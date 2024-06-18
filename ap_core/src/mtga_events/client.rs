@@ -101,6 +101,8 @@ pub enum ClientMessage {
     AssignDamageResp(AssignDamageRespWrapper),
     #[serde(rename = "ClientMessageType_GroupResp")]
     GroupResp(GroupRespWrapper),
+    #[serde(rename = "ClientMessageType_UndoReq")]
+    UndoReq(UndoReqWrapper),
 }
 
 wrapper!(
@@ -162,6 +164,11 @@ wrapper!(
 );
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+pub struct UndoReqWrapper {
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
+}
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroupResp {
     group_type: GroupType,
@@ -183,6 +190,7 @@ pub enum GroupType {
     #[serde(rename = "GroupType_Ordered")]
     Ordered,
 }
+
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct AssignDamageResp {
