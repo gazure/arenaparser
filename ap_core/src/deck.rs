@@ -2,10 +2,11 @@ use itertools::Itertools;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Display;
+use serde::{Deserialize, Serialize};
 
 use crate::mtga_events::gre::DeckMessage;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Deck {
     pub name: String,
     pub game_number: i32,
