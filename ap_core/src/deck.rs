@@ -1,32 +1,26 @@
-use crate::cards::CardsDatabase;
-use crate::mtga_events::gre::DeckMessage;
-use std::collections::BTreeMap;
+use itertools::Itertools;
+use serde_json::Value;
+use std::collections::HashMap;
 use std::fmt::Display;
 
-fn format_list_of_cards(cards: &[String]) -> String {
-    let mut card_quantities: BTreeMap<String, i32> = BTreeMap::new();
-    cards.iter().for_each(|card| {
-        *card_quantities.entry(card.clone()).or_insert(0) += 1;
-    });
-    let mut cards = card_quantities
-        .iter()
-        .map(|(card, quantity)| format!("{} x{}", card, quantity))
-        .collect::<Vec<String>>();
-    cards.sort();
-    cards.join("\n")
-}
+use crate::mtga_events::gre::DeckMessage;
 
 #[derive(Debug)]
 pub struct Deck {
-    name: String,
-    mainboard: Vec<String>,
-    sideboard: Vec<String>,
+    pub name: String,
+    pub game_number: i32,
+    pub mainboard: Vec<i32>,
+    pub sideboard: Vec<i32>,
 }
 
 impl From<DeckMessage> for Deck {
     fn from(deck_message: DeckMessage) -> Self {
-        let cards_db = CardsDatabase::default();
-        Self::new("Found Deck".to_string(), &deck_message, &cards_db)
+        Self::new(
+            "Found Deck".to_string(),
+            0,
+            deck_message.deck_cards,
+            deck_message.sideboard_cards,
+        )
     }
 }
 
@@ -38,32 +32,155 @@ impl From<&DeckMessage> for Deck {
 
 impl Display for Deck {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mainboard_str = format_list_of_cards(&self.mainboard);
-        let sideboard_str = format_list_of_cards(&self.sideboard);
         write!(
             f,
-            "Deck: {}\n\n{}\n\nSideboard:\n{}",
-            &self.name, mainboard_str, sideboard_str
+            "{}\nMainboard:\n{}\nSideboard:\n{}",
+            self.name,
+            &self
+                .mainboard
+                .iter()
+                .map(|i| i.to_string())
+                .fold(String::new(), |acc, i| acc + &i + "\n"),
+            &self
+                .sideboard
+                .iter()
+                .map(|i| i.to_string())
+                .fold(String::new(), |acc, i| acc + &i + "\n")
         )
     }
 }
 
 impl Deck {
-    pub fn new(name: String, deck_message: &DeckMessage, cards_db: &CardsDatabase) -> Self {
-        let mainboard = deck_message
-            .deck_cards
-            .iter()
-            .map(|card_id| cards_db.get_pretty_name_defaulted(card_id))
-            .collect();
-        let sideboard = deck_message
-            .sideboard_cards
-            .iter()
-            .map(|card_id| cards_db.get_pretty_name_defaulted(card_id))
-            .collect();
+    pub fn new(name: String, game_number: i32, mainboard: Vec<i32>, sideboard: Vec<i32>) -> Self {
         Self {
             name,
+            game_number,
             mainboard,
             sideboard,
         }
+    }
+
+    pub fn from_raw_decklist(
+        name: String,
+        game_number: i32,
+        mainboard: &str,
+        sideboard: &str,
+    ) -> Self {
+        let mainboard = process_raw_decklist(mainboard);
+        let sideboard = process_raw_decklist(sideboard);
+        Self::new(name, game_number, mainboard, sideboard)
+    }
+
+    pub fn quantities(&self) -> HashMap<i32, u16> {
+        quantities(&self.mainboard)
+    }
+
+    pub fn sideboard_quantities(&self) -> HashMap<i32, u16> {
+        quantities(&self.sideboard)
+    }
+}
+
+fn quantities(deck: &[i32]) -> HashMap<i32, u16> {
+    deck.iter()
+        .unique()
+        .cloned()
+        .map(|card_id| {
+            let quantity = deck.iter().filter(|&id| *id == card_id).count() as u16;
+            (card_id, quantity)
+        })
+        .collect()
+}
+
+fn process_raw_decklist(raw_decklist: &str) -> Vec<i32> {
+    let parsed = serde_json::from_str(raw_decklist).unwrap_or(Value::Array(Vec::new()));
+    match parsed {
+        Value::Array(arr) => arr
+            .iter()
+            .filter_map(|v| v.as_i64())
+            .map(|v| v as i32)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_quantities() {
+        let deck = vec![1, 2, 3, 1, 2, 3, 1, 2, 3, 4];
+        let quantities = super::quantities(&deck);
+        assert_eq!(quantities.get(&1), Some(&3));
+        assert_eq!(quantities.get(&2), Some(&3));
+        assert_eq!(quantities.get(&3), Some(&3));
+        assert_eq!(quantities.get(&4), Some(&1));
+    }
+
+    #[test]
+    fn test_process_raw_decklist() {
+        let raw_decklist = "[1, 2, 3, 4]";
+        let deck = super::process_raw_decklist(raw_decklist);
+        assert_eq!(deck, vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn test_deck_from_raw_decklist() {
+        let deck = super::Deck::from_raw_decklist("Test Deck".to_string(), 0, "[1, 2, 3]", "[4, 5, 6]");
+        assert_eq!(deck.name, "Test Deck");
+        assert_eq!(deck.game_number, 0);
+        assert_eq!(deck.mainboard, vec![1, 2, 3]);
+        assert_eq!(deck.sideboard, vec![4, 5, 6]);
+    }
+
+    #[test]
+    fn test_deck_display() {
+        let deck = super::Deck::new("Test Deck".to_string(), 0, vec![1, 2, 3], vec![4, 5, 6]);
+        let display = format!("{}", deck);
+        assert_eq!(display, "Test Deck\nMainboard:\n1\n2\n3\n\nSideboard:\n4\n5\n6\n");
+    }
+
+    #[test]
+    fn test_deck_from_deck_message() {
+        let deck_message = crate::mtga_events::gre::DeckMessage {
+            deck_cards: vec![1, 2, 3],
+            sideboard_cards: vec![4, 5, 6],
+        };
+        let deck = super::Deck::from(deck_message);
+        assert_eq!(deck.name, "Found Deck");
+        assert_eq!(deck.game_number, 0);
+        assert_eq!(deck.mainboard, vec![1, 2, 3]);
+        assert_eq!(deck.sideboard, vec![4, 5, 6]);
+    }
+
+    #[test]
+    fn test_deck_from_deck_message_ref() {
+        let deck_message = crate::mtga_events::gre::DeckMessage {
+            deck_cards: vec![1, 2, 3],
+            sideboard_cards: vec![4, 5, 6],
+        };
+        let deck = super::Deck::from(&deck_message);
+        assert_eq!(deck.name, "Found Deck");
+        assert_eq!(deck.game_number, 0);
+        assert_eq!(deck.mainboard, vec![1, 2, 3]);
+        assert_eq!(deck.sideboard, vec![4, 5, 6]);
+    }
+
+    #[test]
+    fn test_deck_quantities() {
+        let deck = super::Deck::new("Test Deck".to_string(), 0, vec![1, 2, 3, 1, 2, 3, 1, 2, 3, 4], vec![4, 5, 6]);
+        let quantities = deck.quantities();
+        assert_eq!(quantities.get(&1), Some(&3));
+        assert_eq!(quantities.get(&2), Some(&3));
+        assert_eq!(quantities.get(&3), Some(&3));
+        assert_eq!(quantities.get(&4), Some(&1));
+    }
+
+    #[test]
+    fn test_deck_sideboard_quantities() {
+        let deck = super::Deck::new("Test Deck".to_string(), 0, vec![1, 2, 3, 1, 2, 3, 1, 2, 3, 4], vec![4, 5, 6]);
+        let quantities = deck.sideboard_quantities();
+        assert_eq!(quantities.get(&4), Some(&1));
+        assert_eq!(quantities.get(&5), Some(&1));
+        assert_eq!(quantities.get(&6), Some(&1));
     }
 }

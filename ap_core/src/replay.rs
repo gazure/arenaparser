@@ -9,6 +9,7 @@ use serde::{Serialize, Serializer};
 use tracing::{debug, info};
 
 use crate::cards::CardsDatabase;
+use crate::deck::Deck;
 use crate::match_insights::{MulliganInfo, MulliganInfoBuilder};
 use crate::mtga_events::client::{
     ClientMessage, MulliganOption, MulliganRespWrapper, RequestTypeClientToMatchServiceMessage,
@@ -196,10 +197,18 @@ impl MatchReplay {
         decklists
     }
 
-    pub(crate) fn get_decklists(&self) -> Result<Vec<DeckMessage>> {
+    pub(crate) fn get_decklists(&self) -> Result<Vec<Deck>> {
         let mut decklists = vec![self.get_initial_decklist()?];
         decklists.append(&mut self.get_sideboarded_decklists());
-        Ok(decklists)
+        Ok(decklists
+            .iter()
+            .map(|deck| -> Deck  {deck.into()})
+            .enumerate()
+            .map(|(i, mut deck)| {
+                deck.game_number = i as i32 + 1;
+                deck
+            })
+            .collect())
     }
 
     pub fn get_mulligan_infos(&self, cards_db: &CardsDatabase) -> Result<Vec<MulliganInfo>> {
@@ -229,7 +238,7 @@ impl MatchReplay {
                                 } else {
                                     "Draw"
                                 };
-                                info!("game_number: {}, play_or_draw: Play", game_number);
+                                info!("game_number: {}, play_or_draw: {}", game_number, pd);
                                 play_or_draw.insert(game_number, pd.to_string());
                             }
                         }

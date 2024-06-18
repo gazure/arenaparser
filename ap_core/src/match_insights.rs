@@ -1,4 +1,3 @@
-use crate::mtga_events::gre::DeckMessage;
 use anyhow::Result;
 use derive_builder::Builder;
 use include_dir::{include_dir, Dir};
@@ -7,6 +6,7 @@ use rusqlite::{Connection, Params as RusqliteParams, Result as RusqliteResult};
 use rusqlite_migration::Migrations;
 use tracing::info;
 use crate::cards::CardsDatabase;
+use crate::deck::Deck;
 use crate::replay::MatchReplay;
 use crate::storage_backends::ArenaMatchStorageBackend;
 
@@ -68,11 +68,10 @@ impl MatchInsightDB {
     pub fn insert_deck(
         &mut self,
         match_id: &str,
-        game_number: i32,
-        deck_message: &DeckMessage,
+        deck: &Deck,
     ) -> Result<()> {
-        let deck_string = serde_json::to_string(&deck_message.deck_cards)?;
-        let sideboard_string = serde_json::to_string(&deck_message.sideboard_cards)?;
+        let deck_string = serde_json::to_string(&deck.mainboard)?;
+        let sideboard_string = serde_json::to_string(&deck.sideboard)?;
 
         self.conn.execute(
             "INSERT INTO decks
@@ -80,7 +79,7 @@ impl MatchInsightDB {
                     VALUES (?1, ?2, ?3, ?4)
                     ON CONFLICT (match_id, game_number)
                     DO UPDATE SET deck_cards = excluded.deck_cards, sideboard_cards = excluded.sideboard_cards",
-            (match_id, game_number, deck_string, sideboard_string)
+            (match_id, deck.game_number, deck_string, sideboard_string)
         )?;
         Ok(())
     }
@@ -139,10 +138,33 @@ impl MatchInsightDB {
         })?;
         Ok(())
     }
+
+    pub fn get_decklists(&mut self, match_id: &str) -> Result<Vec<Deck>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT game_number, deck_cards, sideboard_cards FROM decks WHERE match_id = ?1")?;
+        let deck = stmt
+            .query_map([match_id], |row| {
+                let game_number: i32 = row.get(0)?;
+                let deck_cards: String = row.get(1)?;
+                let sideboard_cards: String = row.get(2)?;
+
+                Ok(Deck::from_raw_decklist(
+                    "Found Deck".to_string(),
+                    game_number,
+                    &deck_cards,
+                    &sideboard_cards,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<Deck>>>()?;
+        Ok(deck)
+    }
 }
 
 
 impl ArenaMatchStorageBackend for MatchInsightDB {
+
+    // TODO: transactions?
     fn write(&mut self, match_replay: &MatchReplay) -> Result<()> {
         info!("Writing match replay to database");
         let controller_seat_id = match_replay.get_controller_seat_id()?;
@@ -156,10 +178,9 @@ impl ArenaMatchStorageBackend for MatchInsightDB {
             &opponent_name,
         )?;
 
-        let decklists = match_replay.get_decklists()?;
-        for (game_number, deck) in decklists.iter().enumerate() {
-            self.insert_deck(&match_replay.match_id, (game_number + 1) as i32, deck)?;
-        }
+        match_replay.get_decklists()?.iter().try_for_each(|deck| {
+            self.insert_deck(&match_replay.match_id, deck)
+        })?;
 
         self.persist_mulligans(match_replay)?;
 

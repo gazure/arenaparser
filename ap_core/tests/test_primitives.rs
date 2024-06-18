@@ -1,6 +1,7 @@
 use anyhow::Result;
+use serde_json::json;
+
 use ap_core::mtga_events::primitives::AnnotationType;
-use serde_json::{from_str, json};
 
 #[test]
 fn test_annotation_type() -> Result<()> {
@@ -9,6 +10,6 @@ fn test_annotation_type() -> Result<()> {
         "AnnotationType_ResolutionComplete",
         "AnnotationType_CardRevealed"
     ]};
-    let annotation_types: Vec<AnnotationType> = serde_json::from_value(annotation_type_strings)?;
+    let _ : Vec<AnnotationType> = serde_json::from_value(annotation_type_strings)?;
     Ok(())
 }

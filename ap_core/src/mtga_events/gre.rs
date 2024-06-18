@@ -126,6 +126,8 @@ pub enum GREToClientMessage {
     AssignDamageReq(AssignDamageReqWrapper),
     #[serde(rename = "GREMessageType_AssignDamageConfirmation")]
     AssignDamageConfirmation(AssignDamageConfirmationWrapper),
+    #[serde(rename = "GREMessageType_IllegalRequest")]
+    IllegalRequest(IllegalRequestWrapper),
     #[default]
     Default,
 }
@@ -140,6 +142,7 @@ pub struct GreMeta {
     pub game_state_id: Option<i32>,
 }
 
+wrapper!(IllegalRequestWrapper);
 wrapper!(AssignDamageReqWrapper);
 wrapper!(AssignDamageConfirmationWrapper);
 wrapper!(OrderDamageConfirmationWrapper);
