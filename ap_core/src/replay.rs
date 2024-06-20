@@ -16,7 +16,7 @@ use crate::mtga_events::client::{
     ClientMessage, MulliganOption, MulliganRespWrapper, RequestTypeClientToMatchServiceMessage,
 };
 use crate::mtga_events::gre::{
-    DeckMessage, GameObjectType, GameStateMessage, GREToClientMessage, MulliganReqWrapper,
+    DeckMessage, GREToClientMessage, GameObjectType, GameStateMessage, MulliganReqWrapper,
     RequestTypeGREToClientEvent,
 };
 use crate::mtga_events::mgrsc::{FinalMatchResult, RequestTypeMGRSCEvent, StateType};
@@ -70,7 +70,6 @@ impl<'a> Serialize for MatchReplayEventRef<'a> {
 }
 
 impl MatchReplay {
-
     /// # Errors
     ///
     /// Returns an error if the file cannot be created or written to
@@ -115,7 +114,6 @@ impl MatchReplay {
                 _ => None,
             })
     }
-
 
     /// # Errors
     ///
@@ -222,7 +220,6 @@ impl MatchReplay {
         decklists
     }
 
-
     /// # Errors
     ///
     /// Returns an Error if the initial decklist is not found
@@ -231,7 +228,7 @@ impl MatchReplay {
         decklists.append(&mut self.get_sideboarded_decklists());
         Ok(decklists
             .iter()
-            .map(|deck| -> Deck  {deck.into()})
+            .map(|deck| -> Deck { deck.into() })
             .enumerate()
             .map(|(i, mut deck)| {
                 deck.game_number = i32::try_from(i).unwrap_or_else(|e| {
@@ -242,7 +239,6 @@ impl MatchReplay {
             })
             .collect())
     }
-
 
     /// # Errors
     ///
@@ -302,7 +298,8 @@ impl MatchReplay {
                                 let Some(zone_id) = go.zone_id else {
                                     return false;
                                 };
-                                zone_id == controller_hand_zone_id && go.type_field == GameObjectType::Card
+                                zone_id == controller_hand_zone_id
+                                    && go.type_field == GameObjectType::Card
                             })
                             .map(|go| go.grp_id)
                             .collect();

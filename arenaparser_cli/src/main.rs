@@ -10,7 +10,6 @@ use ap_core::processor::{ArenaEventSource, PlayerLogProcessor};
 use ap_core::replay::MatchReplayBuilder;
 use ap_core::storage_backends::{ArenaMatchStorageBackend, DirectoryStorageBackend};
 
-
 #[derive(Debug, Parser)]
 #[command(about = "Tries to scrape useful data from mtga detailed logs")]
 struct Args {
@@ -67,7 +66,6 @@ fn main() -> Result<()> {
         db.init()?;
         storage_backends.push(Box::new(db));
     }
-
 
     loop {
         select! {

@@ -191,7 +191,6 @@ pub enum GroupType {
     Ordered,
 }
 
-
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub struct AssignDamageResp {
     #[serde(flatten)]

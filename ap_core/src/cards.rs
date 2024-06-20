@@ -20,7 +20,6 @@ pub struct CardDbEntry {
 }
 
 impl CardsDatabase {
-
     /// # Errors
     ///
     /// Will return an error if the database file cannot be opened or if the database file is not valid JSON

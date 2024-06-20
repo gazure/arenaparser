@@ -5,8 +5,8 @@
 #![allow(clippy::must_use_candidate)]
 pub mod cards;
 pub mod match_insights;
+pub mod models;
 pub mod mtga_events;
 pub mod processor;
 pub mod replay;
 pub mod storage_backends;
-pub mod models;

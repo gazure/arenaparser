@@ -1,9 +1,3 @@
-use anyhow::Result;
-use include_dir::{Dir, include_dir};
-use lazy_static::lazy_static;
-use rusqlite::{Connection, Params as RusqliteParams, Result as RusqliteResult};
-use rusqlite_migration::Migrations;
-use tracing::info;
 use crate::cards::CardsDatabase;
 use crate::models::deck::Deck;
 use crate::models::match_result::{MatchResult, MatchResultBuilder};
@@ -11,6 +5,12 @@ use crate::models::mtga_match::{MTGAMatch, MTGAMatchBuilder};
 use crate::models::mulligan::MulliganInfo;
 use crate::replay::MatchReplay;
 use crate::storage_backends::ArenaMatchStorageBackend;
+use anyhow::Result;
+use include_dir::{include_dir, Dir};
+use lazy_static::lazy_static;
+use rusqlite::{Connection, Params as RusqliteParams, Result as RusqliteResult};
+use rusqlite_migration::Migrations;
+use tracing::info;
 
 static MIGRATIONS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/migrations");
 
@@ -27,7 +27,10 @@ pub struct MatchInsightDB {
 
 impl MatchInsightDB {
     pub fn new(conn: Connection, cards_database: CardsDatabase) -> Self {
-        Self { conn, cards_database }
+        Self {
+            conn,
+            cards_database,
+        }
     }
 
     /// # Errors
@@ -49,10 +52,7 @@ impl MatchInsightDB {
     /// # Errors
     ///
     /// will return an error if the database cannot be contacted for some reason
-    pub fn insert_match(
-        &mut self,
-        mtga_match: &MTGAMatch,
-    ) -> Result<()> {
+    pub fn insert_match(&mut self, mtga_match: &MTGAMatch) -> Result<()> {
         let params = (
             &mtga_match.id,
             &mtga_match.controller_seat_id,
@@ -65,7 +65,7 @@ impl MatchInsightDB {
             "INSERT INTO matches \
             (id, controller_seat_id, controller_player_name, opponent_player_name, created_at)\
             VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(id) DO NOTHING",
-            params
+            params,
         )?;
         Ok(())
     }
@@ -73,11 +73,7 @@ impl MatchInsightDB {
     /// # Errors
     ///
     /// will return an error if the database cannot be contacted for some reason
-    pub fn insert_deck(
-        &mut self,
-        match_id: &str,
-        deck: &Deck,
-    ) -> Result<()> {
+    pub fn insert_deck(&mut self, match_id: &str, deck: &Deck) -> Result<()> {
         let deck_string = serde_json::to_string(&deck.mainboard)?;
         let sideboard_string = serde_json::to_string(&deck.sideboard)?;
 
@@ -117,10 +113,7 @@ impl MatchInsightDB {
     /// # Errors
     ///
     /// will return an error if the database cannot be contacted for some reason
-    pub fn insert_match_result(
-        &mut self,
-        match_result: &MatchResult
-    ) -> Result<()> {
+    pub fn insert_match_result(&mut self, match_result: &MatchResult) -> Result<()> {
         let params = (
             &match_result.match_id,
             &match_result.game_number,
@@ -146,9 +139,8 @@ impl MatchInsightDB {
         let mut stmt = self
             .conn
             .prepare("SELECT game_number, winning_team_id, result_scope FROM match_results WHERE match_id = ?1")?;
-        let results = stmt.query_map(
-            [match_id],
-            |row| {
+        let results = stmt
+            .query_map([match_id], |row| {
                 let game_number: i32 = row.get(0)?;
                 let winning_team_id: i32 = row.get(1)?;
                 let result_scope: String = row.get(2)?;
@@ -159,8 +151,8 @@ impl MatchInsightDB {
                     winning_team_id,
                     result_scope,
                 })
-            },
-        )?.collect::<rusqlite::Result<Vec<MatchResult>>>()?;
+            })?
+            .collect::<rusqlite::Result<Vec<MatchResult>>>()?;
         Ok(results)
     }
 
@@ -170,9 +162,9 @@ impl MatchInsightDB {
     /// the database cannot be contacted for some reason
     fn persist_mulligans(&mut self, match_replay: &MatchReplay) -> Result<()> {
         let mulligan_infos = match_replay.get_mulligan_infos(&self.cards_database)?;
-        mulligan_infos.iter().try_for_each(|mulligan_info| {
-            self.insert_mulligan_info(mulligan_info.clone())
-        })?;
+        mulligan_infos
+            .iter()
+            .try_for_each(|mulligan_info| self.insert_mulligan_info(mulligan_info.clone()))?;
         Ok(())
     }
 
@@ -180,9 +172,9 @@ impl MatchInsightDB {
     ///
     /// will return an error if the database cannot be contacted for some reason
     pub fn get_decklists(&mut self, match_id: &str) -> Result<Vec<Deck>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT game_number, deck_cards, sideboard_cards FROM decks WHERE match_id = ?1")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT game_number, deck_cards, sideboard_cards FROM decks WHERE match_id = ?1",
+        )?;
         let deck = stmt
             .query_map([match_id], |row| {
                 let game_number: i32 = row.get(0)?;
@@ -231,9 +223,7 @@ impl MatchInsightDB {
     }
 }
 
-
 impl ArenaMatchStorageBackend for MatchInsightDB {
-
     // TODO: transactions?
     /// # Errors
     ///
@@ -253,21 +243,23 @@ impl ArenaMatchStorageBackend for MatchInsightDB {
             .opponent_player_name(opponent_name.clone())
             .build()?;
 
+        self.insert_match(&mtga_match)?;
 
-        self.insert_match(
-            &mtga_match
-        )?;
-
-        match_replay.get_decklists()?.iter().try_for_each(|deck| {
-            self.insert_deck(&match_replay.match_id, deck)
-        })?;
+        match_replay
+            .get_decklists()?
+            .iter()
+            .try_for_each(|deck| self.insert_deck(&match_replay.match_id, deck))?;
 
         self.persist_mulligans(match_replay)?;
 
         // not too keen on this data model
         let match_results = match_replay.get_match_results()?;
         for (i, result) in match_results.result_list.iter().enumerate() {
-            let game_number = if result.scope == "MatchScope_Game"{i32::try_from(i + 1).ok()} else {None};
+            let game_number = if result.scope == "MatchScope_Game" {
+                i32::try_from(i + 1).ok()
+            } else {
+                None
+            };
 
             let match_result = MatchResultBuilder::default()
                 .match_id(match_id.to_string())

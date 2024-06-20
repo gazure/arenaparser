@@ -10,6 +10,6 @@ fn test_annotation_type() -> Result<()> {
         "AnnotationType_ResolutionComplete",
         "AnnotationType_CardRevealed"
     ]};
-    let _ : Vec<AnnotationType> = serde_json::from_value(annotation_type_strings)?;
+    let _: Vec<AnnotationType> = serde_json::from_value(annotation_type_strings)?;
     Ok(())
 }

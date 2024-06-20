@@ -22,7 +22,6 @@ pub struct PlayerLogProcessor {
 }
 
 impl PlayerLogProcessor {
-
     /// # Errors
     ///
     /// Will return an error if the player log file cannot be opened

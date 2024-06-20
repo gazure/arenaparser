@@ -8,6 +8,6 @@ pub struct MTGAMatch {
     pub controller_seat_id: i32,
     pub controller_player_name: String,
     pub opponent_player_name: String,
-    #[builder(setter(skip), default= "Utc::now()")]
+    #[builder(setter(skip), default = "Utc::now()")]
     pub created_at: DateTime<Utc>,
 }
