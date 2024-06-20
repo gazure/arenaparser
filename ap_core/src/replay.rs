@@ -9,13 +9,14 @@ use serde::{Serialize, Serializer};
 use tracing::{debug, info, warn};
 
 use crate::cards::CardsDatabase;
-use crate::deck::Deck;
-use crate::match_insights::{MulliganInfo, MulliganInfoBuilder};
+use crate::models::deck::Deck;
+use crate::models::mulligan::MulliganInfo;
+use crate::models::mulligan::MulliganInfoBuilder;
 use crate::mtga_events::client::{
     ClientMessage, MulliganOption, MulliganRespWrapper, RequestTypeClientToMatchServiceMessage,
 };
 use crate::mtga_events::gre::{
-    DeckMessage, GREToClientMessage, GameObjectType, GameStateMessage, MulliganReqWrapper,
+    DeckMessage, GameObjectType, GameStateMessage, GREToClientMessage, MulliganReqWrapper,
     RequestTypeGREToClientEvent,
 };
 use crate::mtga_events::mgrsc::{FinalMatchResult, RequestTypeMGRSCEvent, StateType};

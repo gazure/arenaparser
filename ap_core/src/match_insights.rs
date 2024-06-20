@@ -1,12 +1,14 @@
 use anyhow::Result;
-use derive_builder::Builder;
-use include_dir::{include_dir, Dir};
+use include_dir::{Dir, include_dir};
 use lazy_static::lazy_static;
 use rusqlite::{Connection, Params as RusqliteParams, Result as RusqliteResult};
 use rusqlite_migration::Migrations;
 use tracing::info;
 use crate::cards::CardsDatabase;
-use crate::deck::Deck;
+use crate::models::deck::Deck;
+use crate::models::match_result::{MatchResult, MatchResultBuilder};
+use crate::models::mtga_match::{MTGAMatch, MTGAMatchBuilder};
+use crate::models::mulligan::MulliganInfo;
 use crate::replay::MatchReplay;
 use crate::storage_backends::ArenaMatchStorageBackend;
 
@@ -15,17 +17,6 @@ static MIGRATIONS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/migrations");
 lazy_static! {
     static ref MIGRATIONS: Migrations<'static> =
         Migrations::from_directory(&MIGRATIONS_DIR).unwrap_or(Migrations::new(Vec::new()));
-}
-
-#[derive(Debug, Clone, Builder)]
-pub struct MulliganInfo {
-    pub match_id: String,
-    pub game_number: i32,
-    pub number_to_keep: i32,
-    pub hand: String,
-    pub play_draw: String,
-    pub opponent_identity: String,
-    pub decision: String,
 }
 
 #[derive(Debug)]
@@ -60,18 +51,21 @@ impl MatchInsightDB {
     /// will return an error if the database cannot be contacted for some reason
     pub fn insert_match(
         &mut self,
-        id: &str,
-        seat_id: i32,
-        name: &str,
-        opp_name: &str,
+        mtga_match: &MTGAMatch,
     ) -> Result<()> {
-        let now = chrono::Utc::now();
+        let params = (
+            &mtga_match.id,
+            &mtga_match.controller_seat_id,
+            &mtga_match.controller_player_name,
+            &mtga_match.opponent_player_name,
+            &mtga_match.created_at,
+        );
 
         self.conn.execute(
             "INSERT INTO matches \
             (id, controller_seat_id, controller_player_name, opponent_player_name, created_at)\
             VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(id) DO NOTHING",
-            (id, seat_id, name, opp_name, now),
+            params
         )?;
         Ok(())
     }
@@ -125,17 +119,21 @@ impl MatchInsightDB {
     /// will return an error if the database cannot be contacted for some reason
     pub fn insert_match_result(
         &mut self,
-        match_id: &str,
-        game_number: Option<i32>,
-        winning_team_id: i32,
-        result_scope: String,
+        match_result: &MatchResult
     ) -> Result<()> {
+        let params = (
+            &match_result.match_id,
+            &match_result.game_number,
+            &match_result.winning_team_id,
+            &match_result.result_scope,
+        );
+
         self.conn.execute(
             "INSERT INTO match_results (match_id, game_number, winning_team_id, result_scope)\
              VALUES (?1, ?2, ?3, ?4)\
              ON CONFLICT (match_id, game_number)\
              DO UPDATE SET winning_team_id = excluded.winning_team_id, result_scope = excluded.result_scope",
-            (match_id, game_number, winning_team_id, result_scope)
+            params
         )?;
 
         Ok(())
@@ -144,13 +142,25 @@ impl MatchInsightDB {
     /// # Errors
     ///
     /// will return an error if the database cannot be contacted for some reason
-    pub fn get_match_results(&mut self, match_id: &str) -> Result<Vec<(i32, String)>> {
+    pub fn get_match_results(&mut self, match_id: &str) -> Result<Vec<MatchResult>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT game_number, result_scope FROM match_results WHERE match_id = ?1")?;
-        let results = stmt
-            .query_map([match_id], |row| Ok((row.get(0)?, row.get(1)?)))?
-            .collect::<rusqlite::Result<Vec<(i32, String)>>>()?;
+            .prepare("SELECT game_number, winning_team_id, result_scope FROM match_results WHERE match_id = ?1")?;
+        let results = stmt.query_map(
+            [match_id],
+            |row| {
+                let game_number: i32 = row.get(0)?;
+                let winning_team_id: i32 = row.get(1)?;
+                let result_scope: String = row.get(2)?;
+
+                Ok(MatchResult {
+                    match_id: match_id.to_string(),
+                    game_number: Some(game_number),
+                    winning_team_id,
+                    result_scope,
+                })
+            },
+        )?.collect::<rusqlite::Result<Vec<MatchResult>>>()?;
         Ok(results)
     }
 
@@ -236,11 +246,16 @@ impl ArenaMatchStorageBackend for MatchInsightDB {
         let match_id = &match_replay.match_id;
         let (controller_name, opponent_name) = match_replay.get_player_names(controller_seat_id)?;
 
+        let mtga_match = MTGAMatchBuilder::default()
+            .id(match_id.to_string())
+            .controller_seat_id(controller_seat_id)
+            .controller_player_name(controller_name.clone())
+            .opponent_player_name(opponent_name.clone())
+            .build()?;
+
+
         self.insert_match(
-            match_id,
-            controller_seat_id,
-            &controller_name,
-            &opponent_name,
+            &mtga_match
         )?;
 
         match_replay.get_decklists()?.iter().try_for_each(|deck| {
@@ -252,21 +267,16 @@ impl ArenaMatchStorageBackend for MatchInsightDB {
         // not too keen on this data model
         let match_results = match_replay.get_match_results()?;
         for (i, result) in match_results.result_list.iter().enumerate() {
-            if result.scope == "MatchScope_Game" {
-                self.insert_match_result(
-                    match_id,
-                    i32::try_from(i + 1).ok(),
-                    result.winning_team_id,
-                    result.scope.clone(),
-                )?;
-            } else {
-                self.insert_match_result(
-                    match_id,
-                    None,
-                    result.winning_team_id,
-                    result.scope.clone(),
-                )?;
-            }
+            let game_number = if result.scope == "MatchScope_Game"{i32::try_from(i + 1).ok()} else {None};
+
+            let match_result = MatchResultBuilder::default()
+                .match_id(match_id.to_string())
+                .game_number(game_number)
+                .winning_team_id(result.winning_team_id)
+                .result_scope(result.scope.clone())
+                .build()?;
+
+            self.insert_match_result(&match_result)?;
         }
         Ok(())
     }
