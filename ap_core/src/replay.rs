@@ -434,7 +434,6 @@ impl MatchReplayBuilder {
     }
 
     pub fn ingest_event(&mut self, event: ParseOutput) -> bool {
-        debug!("ingesting event: {:?}", event);
         match event {
             ParseOutput::GREMessage(gre_message) => self
                 .client_server_messages

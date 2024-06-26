@@ -52,7 +52,6 @@ fn main() -> Result<()> {
     let mut storage_backends: Vec<Box<dyn ArenaMatchStorageBackend>> = Vec::new();
     let cards_db =
         ap_core::cards::CardsDatabase::new(args.cards_db.unwrap_or("data/cards-full.json".into()))?;
-    let follow = args.follow;
 
     let ctrl_c_rx = ctrl_c_channel()?;
     if let Some(output_dir) = args.output_dir {
@@ -84,7 +83,7 @@ fn main() -> Result<()> {
                         match_replay_builder = MatchReplayBuilder::new();
                     }
                 }
-                if !follow {
+                if !args.follow {
                     break;
                 }
             }

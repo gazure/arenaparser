@@ -425,7 +425,7 @@ pub struct GameObject {
     pub card_types: Vec<String>,
     #[serde(default)]
     pub color: Vec<String>,
-    pub controller_seat_id: i32,
+    pub controller_seat_id: Option<i32>,
     pub grp_id: i32,
     pub instance_id: i32,
     pub name: Option<i32>,

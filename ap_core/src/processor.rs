@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use tracing::error;
+use tracing::{debug, error};
 
 use crate::mtga_events::client::RequestTypeClientToMatchServiceMessage;
 use crate::mtga_events::gre::RequestTypeGREToClientEvent;
@@ -98,6 +98,7 @@ impl ArenaEventSource for PlayerLogProcessor {
         self.json_events.pop_front().map(|json_str| {
             parse(&json_str).unwrap_or_else(|e| {
                 error!("Error parsing event: {}", e);
+                debug!("Event: {}", json_str);
                 ParseOutput::NoEvent
             })
         })

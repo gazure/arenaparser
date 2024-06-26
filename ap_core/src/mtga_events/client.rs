@@ -520,4 +520,6 @@ pub enum ActionType {
     Special,
     #[serde(rename = "ActionType_CastAdventure")]
     CastAdventure,
+    #[serde(rename = "ActionType_Make_Payment")]
+    MakePayment,
 }
