@@ -219,13 +219,13 @@ impl MatchInsightDB {
                 let controller_seat_id: i32 = row.get(1)?;
                 let controller_player_name: String = row.get(2)?;
                 let opponent_player_name: String = row.get(3)?;
-                let created_at: DateTime<Utc> = row.get(4)?;
+                let created_at: Option<DateTime<Utc>> = row.get(4)?;
                 Ok(MTGAMatch {
                     id,
                     controller_seat_id,
                     controller_player_name,
                     opponent_player_name,
-                    created_at
+                    created_at: created_at.unwrap_or_default()
                 })
             })?
             .collect::<RusqliteResult<Vec<MTGAMatch>>>()?;
