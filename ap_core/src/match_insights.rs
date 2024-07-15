@@ -1,3 +1,11 @@
+use anyhow::Result;
+use chrono::{DateTime, Utc};
+use include_dir::{Dir, include_dir};
+use lazy_static::lazy_static;
+use rusqlite::{Connection, Params as RusqliteParams, Result as RusqliteResult, Transaction};
+use rusqlite_migration::Migrations;
+use tracing::info;
+
 use crate::cards::CardsDatabase;
 use crate::models::deck::Deck;
 use crate::models::match_result::{MatchResult, MatchResultBuilder};
@@ -5,12 +13,6 @@ use crate::models::mtga_match::{MTGAMatch, MTGAMatchBuilder};
 use crate::models::mulligan::MulliganInfo;
 use crate::replay::MatchReplay;
 use crate::storage_backends::ArenaMatchStorageBackend;
-use anyhow::Result;
-use include_dir::{include_dir, Dir};
-use lazy_static::lazy_static;
-use rusqlite::{Connection, Params as RusqliteParams, Result as RusqliteResult};
-use rusqlite_migration::Migrations;
-use tracing::info;
 
 static MIGRATIONS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/migrations");
 
@@ -49,10 +51,11 @@ impl MatchInsightDB {
         self.conn.execute(query, params)
     }
 
+
     /// # Errors
     ///
     /// will return an error if the database cannot be contacted for some reason
-    pub fn insert_match(&mut self, mtga_match: &MTGAMatch) -> Result<()> {
+    fn insert_match(mtga_match: &MTGAMatch, tx: &Transaction) -> Result<()> {
         let params = (
             &mtga_match.id,
             &mtga_match.controller_seat_id,
@@ -61,23 +64,21 @@ impl MatchInsightDB {
             &mtga_match.created_at,
         );
 
-        self.conn.execute(
-            "INSERT INTO matches \
+        let sql = "INSERT INTO matches \
             (id, controller_seat_id, controller_player_name, opponent_player_name, created_at)\
-            VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(id) DO NOTHING",
-            params,
-        )?;
+            VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(id) DO NOTHING";
+        tx.execute(sql, params)?;
         Ok(())
     }
 
     /// # Errors
     ///
     /// will return an error if the database cannot be contacted for some reason
-    pub fn insert_deck(&mut self, match_id: &str, deck: &Deck) -> Result<()> {
+    pub fn insert_deck(match_id: &str, deck: &Deck, tx: &Transaction) -> Result<()> {
         let deck_string = serde_json::to_string(&deck.mainboard)?;
         let sideboard_string = serde_json::to_string(&deck.sideboard)?;
 
-        self.conn.execute(
+        tx.execute(
             "INSERT INTO decks
                     (match_id, game_number, deck_cards, sideboard_cards)
                     VALUES (?1, ?2, ?3, ?4)
@@ -91,8 +92,8 @@ impl MatchInsightDB {
     /// # Errors
     ///
     /// will return an error if the database cannot be contacted for some reason
-    pub fn insert_mulligan_info(&mut self, mulligan_info: MulliganInfo) -> Result<()> {
-        self.conn.execute(
+    pub fn insert_mulligan_info(mulligan_info: MulliganInfo, tx: &Transaction) -> Result<()> {
+        tx.execute(
             "INSERT INTO mulligans (match_id, game_number, number_to_keep, hand, play_draw, opponent_identity, decision)\
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)\
              ON CONFLICT (match_id, game_number, number_to_keep) \
@@ -113,7 +114,7 @@ impl MatchInsightDB {
     /// # Errors
     ///
     /// will return an error if the database cannot be contacted for some reason
-    pub fn insert_match_result(&mut self, match_result: &MatchResult) -> Result<()> {
+   fn insert_match_result(match_result: &MatchResult, tx: &Transaction) -> Result<()> {
         let params = (
             &match_result.match_id,
             &match_result.game_number,
@@ -121,14 +122,11 @@ impl MatchInsightDB {
             &match_result.result_scope,
         );
 
-        self.conn.execute(
-            "INSERT INTO match_results (match_id, game_number, winning_team_id, result_scope)\
+        let sql = "INSERT INTO match_results (match_id, game_number, winning_team_id, result_scope)\
              VALUES (?1, ?2, ?3, ?4)\
              ON CONFLICT (match_id, game_number)\
-             DO UPDATE SET winning_team_id = excluded.winning_team_id, result_scope = excluded.result_scope",
-            params
-        )?;
-
+             DO UPDATE SET winning_team_id = excluded.winning_team_id, result_scope = excluded.result_scope";
+        tx.execute(sql, params)?;
         Ok(())
     }
 
@@ -154,18 +152,6 @@ impl MatchInsightDB {
             })?
             .collect::<rusqlite::Result<Vec<MatchResult>>>()?;
         Ok(results)
-    }
-
-    /// # Errors
-    ///
-    /// will return an error if mulligans cannot be found in `match_replay` or
-    /// the database cannot be contacted for some reason
-    fn persist_mulligans(&mut self, match_replay: &MatchReplay) -> Result<()> {
-        let mulligan_infos = match_replay.get_mulligan_infos(&self.cards_database)?;
-        mulligan_infos
-            .iter()
-            .try_for_each(|mulligan_info| self.insert_mulligan_info(mulligan_info.clone()))?;
-        Ok(())
     }
 
     /// # Errors
@@ -221,10 +207,34 @@ impl MatchInsightDB {
             .collect::<rusqlite::Result<Vec<MulliganInfo>>>()?;
         Ok(mulligans)
     }
+
+    /// # Errors
+    ///
+    /// will return an error if the database cannot be contacted for some reason
+    pub fn get_matches(&mut self) -> Result<Vec<MTGAMatch>> {
+        let mut statement = self.conn.prepare("SELECT id, controller_seat_id, controller_player_name, opponent_player_name, created_at FROM matches")?;
+        let matches = statement
+            .query_map([], |row| {
+                let id: String = row.get(0)?;
+                let controller_seat_id: i32 = row.get(1)?;
+                let controller_player_name: String = row.get(2)?;
+                let opponent_player_name: String = row.get(3)?;
+                let created_at: DateTime<Utc> = row.get(4)?;
+                Ok(MTGAMatch {
+                    id,
+                    controller_seat_id,
+                    controller_player_name,
+                    opponent_player_name,
+                    created_at
+                })
+            })?
+            .collect::<RusqliteResult<Vec<MTGAMatch>>>()?;
+
+        Ok(matches)
+    }
 }
 
 impl ArenaMatchStorageBackend for MatchInsightDB {
-    // TODO: transactions?
     /// # Errors
     ///
     /// will return an error if a `controller_seat_id` cannot be found
@@ -239,18 +249,23 @@ impl ArenaMatchStorageBackend for MatchInsightDB {
         let mtga_match = MTGAMatchBuilder::default()
             .id(match_id.to_string())
             .controller_seat_id(controller_seat_id)
-            .controller_player_name(controller_name.clone())
-            .opponent_player_name(opponent_name.clone())
+            .controller_player_name(controller_name)
+            .opponent_player_name(opponent_name)
             .build()?;
 
-        self.insert_match(&mtga_match)?;
+        let tx = self.conn.transaction()?;
+
+        Self::insert_match(&mtga_match, &tx)?;
 
         match_replay
             .get_decklists()?
             .iter()
-            .try_for_each(|deck| self.insert_deck(&match_replay.match_id, deck))?;
+            .try_for_each(|deck| Self::insert_deck(&match_replay.match_id, deck, &tx))?;
 
-        self.persist_mulligans(match_replay)?;
+        let mulligan_infos = match_replay.get_mulligan_infos(&self.cards_database)?;
+        mulligan_infos
+            .iter()
+            .try_for_each(|mulligan_info| Self::insert_mulligan_info(mulligan_info.clone(), &tx))?;
 
         // not too keen on this data model
         let match_results = match_replay.get_match_results()?;
@@ -268,8 +283,10 @@ impl ArenaMatchStorageBackend for MatchInsightDB {
                 .result_scope(result.scope.clone())
                 .build()?;
 
-            self.insert_match_result(&match_result)?;
+            Self::insert_match_result(&match_result, &tx)?;
         }
+
+        tx.commit()?;
         Ok(())
     }
 }

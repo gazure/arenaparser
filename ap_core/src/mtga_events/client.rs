@@ -522,4 +522,6 @@ pub enum ActionType {
     CastAdventure,
     #[serde(rename = "ActionType_Make_Payment")]
     MakePayment,
+    #[serde(rename = "ActionType_OpeningHandAction")]
+    OpeningHandAction,
 }
