@@ -136,7 +136,7 @@ impl MatchInsightDB {
     pub fn get_match_results(&mut self, match_id: &str) -> Result<Vec<MatchResult>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT game_number, winning_team_id, result_scope FROM match_results WHERE match_id = ?1")?;
+            .prepare("SELECT game_number, winning_team_id, result_scope FROM match_results WHERE match_id = ?1 AND game_number IS NOT NULL")?;
         let results = stmt
             .query_map([match_id], |row| {
                 let game_number: i32 = row.get(0)?;
