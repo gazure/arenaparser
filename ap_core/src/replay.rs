@@ -1,7 +1,4 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::path::PathBuf;
 use std::vec::IntoIter;
 
 use anyhow::{anyhow, Result};
@@ -24,16 +21,6 @@ use crate::mtga_events::primitives::ZoneType;
 use crate::processor::ParseOutput;
 
 const DEFAULT_HAND_SIZE: i32 = 7;
-
-fn write_line<T>(writer: &mut BufWriter<File>, line: &T) -> Result<()>
-where
-    T: Serialize,
-{
-    let line_str = serde_json::to_string(line)?;
-    writer.write_all(line_str.as_bytes())?;
-    writer.write_all(b"\n")?;
-    Ok(())
-}
 
 #[derive(Debug, Default)]
 pub struct MatchReplay {
@@ -70,18 +57,6 @@ impl<'a> Serialize for MatchReplayEventRef<'a> {
 }
 
 impl MatchReplay {
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be created or written to
-    pub fn write(&self, path: PathBuf) -> Result<()> {
-        let file = File::create(path)?;
-        let mut writer = BufWriter::new(file);
-
-        for match_item in self {
-            write_line(&mut writer, &match_item)?;
-        }
-        Ok(())
-    }
     fn gre_events_iter(&self) -> impl Iterator<Item = &RequestTypeGREToClientEvent> {
         self.client_server_messages
             .iter()

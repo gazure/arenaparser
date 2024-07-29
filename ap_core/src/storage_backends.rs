@@ -1,4 +1,8 @@
 use crate::replay::MatchReplay;
+use anyhow::Result;
+use serde::Serialize;
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use tracing::info;
 
@@ -19,6 +23,16 @@ impl DirectoryStorageBackend {
     }
 }
 
+fn write_line<T>(writer: &mut BufWriter<File>, line: &T) -> Result<()>
+where
+    T: Serialize,
+{
+    let line_str = serde_json::to_string(line)?;
+    writer.write_all(line_str.as_bytes())?;
+    writer.write_all(b"\n")?;
+    Ok(())
+}
+
 impl ArenaMatchStorageBackend for DirectoryStorageBackend {
     fn write(&mut self, match_replay: &MatchReplay) -> anyhow::Result<()> {
         let path = self.path.join(format!("{}.json", match_replay.match_id));
@@ -26,7 +40,12 @@ impl ArenaMatchStorageBackend for DirectoryStorageBackend {
             "Writing match replay to file: {}",
             path.clone().to_str().unwrap_or("Path not found")
         );
-        match_replay.write(path)?;
+        let file = File::create(path)?;
+        let mut writer = BufWriter::new(file);
+
+        for match_item in match_replay {
+            write_line(&mut writer, &match_item)?;
+        }
         info!("Match replay written to file");
         Ok(())
     }

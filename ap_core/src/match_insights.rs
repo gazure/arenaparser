@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use include_dir::{Dir, include_dir};
+use include_dir::{include_dir, Dir};
 use lazy_static::lazy_static;
 use rusqlite::{Connection, Params as RusqliteParams, Result as RusqliteResult, Transaction};
 use rusqlite_migration::Migrations;
@@ -50,7 +50,6 @@ impl MatchInsightDB {
     pub fn execute(&mut self, query: &str, params: impl RusqliteParams) -> RusqliteResult<usize> {
         self.conn.execute(query, params)
     }
-
 
     /// # Errors
     ///
@@ -114,7 +113,7 @@ impl MatchInsightDB {
     /// # Errors
     ///
     /// will return an error if the database cannot be contacted for some reason
-   fn insert_match_result(match_result: &MatchResult, tx: &Transaction) -> Result<()> {
+    fn insert_match_result(match_result: &MatchResult, tx: &Transaction) -> Result<()> {
         let params = (
             &match_result.match_id,
             &match_result.game_number,
@@ -225,7 +224,7 @@ impl MatchInsightDB {
                     controller_seat_id,
                     controller_player_name,
                     opponent_player_name,
-                    created_at: created_at.unwrap_or_default()
+                    created_at: created_at.unwrap_or_default(),
                 })
             })?
             .collect::<RusqliteResult<Vec<MTGAMatch>>>()?;
