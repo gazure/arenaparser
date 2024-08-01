@@ -272,6 +272,10 @@ pub enum CastingTimeOptionType {
     ChooseX,
     #[serde(rename = "CastingTimeOptionType_Selection")]
     Selection,
+    #[serde(rename = "CastingTimeOptionType_AdditionalCost")]
+    AdditionalCost,
+    #[serde(rename = "CastingTimeOptionType_Done")]
+    Done,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]

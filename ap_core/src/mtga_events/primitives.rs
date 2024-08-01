@@ -299,6 +299,9 @@ pub enum AnnotationType {
     TemporaryPermanent,
     #[serde(rename = "AnnotationType_UseOrCostsManaCost")]
     UseOrCostsManaCost,
+    #[serde(rename = "AnnotationType_ClassLevel")]
+    ClassLevel,
+
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
