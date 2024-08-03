@@ -13,7 +13,7 @@ pub struct CardsDatabase {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CardDbEntry {
-    pub id: String,
+    pub id: i32,
     pub name: String,
     pub pretty_name: String,
     pub color_identity: Vec<String>,

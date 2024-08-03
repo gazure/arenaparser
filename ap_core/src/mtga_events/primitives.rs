@@ -301,7 +301,16 @@ pub enum AnnotationType {
     UseOrCostsManaCost,
     #[serde(rename = "AnnotationType_ClassLevel")]
     ClassLevel,
-
+    #[serde(rename = "AnnotationType_PredictedDirectDamage")]
+    PredictedDirectDamage,
+    #[serde(rename = "AnnotationType_FaceDown")]
+    FaceDown,
+    #[serde(rename = "AnnotationType_SaddledThisTurn")]
+    SaddledThisTurn,
+    #[serde(rename = "AnnotationType_TurnPermanent")]
+    TurnPermanent,
+    #[serde(rename = "AnnotationType_LoseDesignation")]
+    LoseDesignation,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
