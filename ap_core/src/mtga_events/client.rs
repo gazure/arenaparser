@@ -29,9 +29,9 @@ pub struct RequestTypeClientToMatchServiceMessage {
     pub request_id: i32,
     #[serde(rename = "payload")]
     pub payload: ClientMessage,
-    pub timestamp: String,
+    pub timestamp: Option<String>,
     #[serde(rename = "transactionId")]
-    pub transaction_id: String,
+    pub transaction_id: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]

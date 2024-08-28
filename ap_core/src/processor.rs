@@ -5,6 +5,7 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use tracing::{debug, error};
 
+use crate::mtga_events::business::RequestTypeBusinessEvent;
 use crate::mtga_events::client::RequestTypeClientToMatchServiceMessage;
 use crate::mtga_events::gre::RequestTypeGREToClientEvent;
 use crate::mtga_events::mgrsc::RequestTypeMGRSCEvent;
@@ -110,6 +111,7 @@ pub enum ParseOutput {
     GREMessage(RequestTypeGREToClientEvent),
     ClientMessage(RequestTypeClientToMatchServiceMessage),
     MGRSCMessage(RequestTypeMGRSCEvent),
+    BusinessMessage(RequestTypeBusinessEvent),
     NoEvent,
 }
 
@@ -127,6 +129,8 @@ pub fn parse(event: &str) -> Result<ParseOutput> {
     } else if event.contains("greToClientEvent") {
         let request_gre_to_client_event: RequestTypeGREToClientEvent = serde_json::from_str(event)?;
         Ok(ParseOutput::GREMessage(request_gre_to_client_event))
+    } else if let Ok(business_event) = serde_json::from_str::<RequestTypeBusinessEvent>(event) {
+        Ok(ParseOutput::BusinessMessage(business_event))
     } else {
         Ok(ParseOutput::NoEvent)
     }

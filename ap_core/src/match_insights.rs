@@ -73,7 +73,7 @@ impl MatchInsightDB {
     /// # Errors
     ///
     /// will return an error if the database cannot be contacted for some reason
-    pub fn insert_deck(match_id: &str, deck: &Deck, tx: &Transaction) -> Result<()> {
+    fn insert_deck(match_id: &str, deck: &Deck, tx: &Transaction) -> Result<()> {
         let deck_string = serde_json::to_string(&deck.mainboard)?;
         let sideboard_string = serde_json::to_string(&deck.sideboard)?;
 
@@ -91,7 +91,7 @@ impl MatchInsightDB {
     /// # Errors
     ///
     /// will return an error if the database cannot be contacted for some reason
-    pub fn insert_mulligan_info(mulligan_info: MulliganInfo, tx: &Transaction) -> Result<()> {
+    fn insert_mulligan_info(mulligan_info: MulliganInfo, tx: &Transaction) -> Result<()> {
         tx.execute(
             "INSERT INTO mulligans (match_id, game_number, number_to_keep, hand, play_draw, opponent_identity, decision)\
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)\
@@ -244,12 +244,14 @@ impl ArenaMatchStorageBackend for MatchInsightDB {
         let controller_seat_id = match_replay.get_controller_seat_id()?;
         let match_id = &match_replay.match_id;
         let (controller_name, opponent_name) = match_replay.get_player_names(controller_seat_id)?;
+        let event_start = match_replay.match_start_time().unwrap_or(Utc::now());
 
         let mtga_match = MTGAMatchBuilder::default()
             .id(match_id.to_string())
             .controller_seat_id(controller_seat_id)
             .controller_player_name(controller_name)
             .opponent_player_name(opponent_name)
+            .created_at(event_start)
             .build()?;
 
         let tx = self.conn.transaction()?;

@@ -112,6 +112,8 @@ pub enum Spec {
     AdditionalEffect,
     #[serde(rename = "ManaSpecType_CantBeCountered")]
     CantBeCountered,
+    #[serde(rename = "ManaSpecType_FromSnow")]
+    FromSnow,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

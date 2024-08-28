@@ -507,3 +507,17 @@ pub struct Team {
 pub struct DieRollResultsResp {
     pub player_die_rolls: Vec<PlayerDieRoll>,
 }
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+    use std::mem::size_of;
+
+    #[test]
+    fn test_gre_sizes() {
+        assert_eq!(size_of::<GREToClientMessage>(), 648);
+        assert_eq!(size_of::<GreMeta>(), 40);
+        assert_eq!(size_of::<ConnectRespWrapper>(), 448);
+    }
+}

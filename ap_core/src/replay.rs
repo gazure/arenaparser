@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::vec::IntoIter;
 
 use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
 use serde::{Serialize, Serializer};
 use tracing::{debug, info, warn};
 
@@ -9,6 +10,7 @@ use crate::cards::CardsDatabase;
 use crate::models::deck::Deck;
 use crate::models::mulligan::MulliganInfo;
 use crate::models::mulligan::MulliganInfoBuilder;
+use crate::mtga_events::business::BusinessEventRequest;
 use crate::mtga_events::client::{
     ClientMessage, MulliganOption, MulliganRespWrapper, RequestTypeClientToMatchServiceMessage,
 };
@@ -28,6 +30,7 @@ pub struct MatchReplay {
     pub match_start_message: RequestTypeMGRSCEvent,
     pub match_end_message: RequestTypeMGRSCEvent,
     pub client_server_messages: Vec<MatchReplayEvent>,
+    pub business_messages: Vec<BusinessEventRequest>,
 }
 
 #[derive(Debug, Clone)]
@@ -368,6 +371,10 @@ impl MatchReplay {
         Ok(mulligan_infos)
     }
 
+    pub fn match_start_time(&self) -> Option<DateTime<Utc>> {
+        self.business_messages.iter().find_map(|bm| bm.event_time)
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = MatchReplayEventRef> {
         self.into_iter()
     }
@@ -399,6 +406,7 @@ pub struct MatchReplayBuilder {
     pub match_start_message: RequestTypeMGRSCEvent,
     pub match_end_message: RequestTypeMGRSCEvent,
     pub client_server_messages: Vec<MatchReplayEvent>,
+    pub business_messages: Vec<BusinessEventRequest>,
 }
 
 impl MatchReplayBuilder {
@@ -418,6 +426,12 @@ impl MatchReplayBuilder {
                 .push(MatchReplayEvent::Client(client_message)),
             ParseOutput::MGRSCMessage(mgrsc_event) => {
                 return self.ingest_mgrc_event(mgrsc_event);
+            }
+            ParseOutput::BusinessMessage(business_message) => {
+                if business_message.is_relevant() {
+                    debug!("Business message: {:?}", business_message);
+                    self.business_messages.push(business_message.request);
+                }
             }
             ParseOutput::NoEvent => {}
         }
@@ -458,6 +472,7 @@ impl MatchReplayBuilder {
             match_start_message: self.match_start_message,
             match_end_message: self.match_end_message,
             client_server_messages: self.client_server_messages,
+            business_messages: self.business_messages,
         };
         Ok(match_replay)
     }
