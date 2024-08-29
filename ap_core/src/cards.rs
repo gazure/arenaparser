@@ -12,11 +12,28 @@ pub struct CardsDatabase {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct CardFace {
+    pub name: String,
+    pub type_line: String,
+    pub mana_cost: Option<String>,
+    pub image_uri: Option<String>,
+    pub colors: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CardDbEntry {
     pub id: i32,
+    pub set: String,
     pub name: String,
-    pub pretty_name: String,
+    pub lang: String,
+    pub image_uri: Option<String>,
+    pub mana_cost: Option<String>,
+    pub cmc: f32,
+    pub type_line: String,
+    pub layout: String,
+    pub colors: Option<Vec<String>>,
     pub color_identity: Vec<String>,
+    pub card_faces: Option<Vec<CardFace>>,
 }
 
 impl CardsDatabase {
@@ -43,7 +60,7 @@ impl CardsDatabase {
             .db
             .get(&grp_id)
             .ok_or_else(|| anyhow::anyhow!("Card not found in database"))?;
-        Ok(card.pretty_name.clone())
+        Ok(card.name.clone())
     }
 
     pub fn get_pretty_name_defaulted<T>(&self, grp_id: &T) -> String

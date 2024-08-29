@@ -44,6 +44,7 @@ pub enum MatchReplayEventRef<'a> {
     GRE(&'a RequestTypeGREToClientEvent),
     Client(&'a RequestTypeClientToMatchServiceMessage),
     MGRSC(&'a RequestTypeMGRSCEvent),
+    Business(&'a BusinessEventRequest),
 }
 
 impl<'a> Serialize for MatchReplayEventRef<'a> {
@@ -55,6 +56,7 @@ impl<'a> Serialize for MatchReplayEventRef<'a> {
             Self::MGRSC(event) => event.serialize(serializer),
             Self::GRE(event) => event.serialize(serializer),
             Self::Client(event) => event.serialize(serializer),
+            Self::Business(event) => event.serialize(serializer),
         }
     }
 }
@@ -396,6 +398,9 @@ impl<'a> IntoIterator for &'a MatchReplay {
             events.push(mre_ref);
         });
         events.push(MatchReplayEventRef::MGRSC(&self.match_end_message));
+        self.business_messages.iter().for_each(|bm| {
+            events.push(MatchReplayEventRef::Business(bm));
+        });
         events.into_iter()
     }
 }
