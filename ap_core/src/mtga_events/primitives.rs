@@ -313,6 +313,8 @@ pub enum AnnotationType {
     TurnPermanent,
     #[serde(rename = "AnnotationType_LoseDesignation")]
     LoseDesignation,
+    #[serde(rename = "AnnotationType_TextChange")]
+    TextChange,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

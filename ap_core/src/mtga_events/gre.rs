@@ -470,6 +470,8 @@ pub enum GameObjectType {
     DisturbBack,
     #[serde(rename = "GameObjectType_RoomLeft")]
     RoomLeft,
+    #[serde(rename = "GameObjectType_RoomRight")]
+    RoomRight,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
