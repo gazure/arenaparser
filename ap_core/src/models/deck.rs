@@ -137,7 +137,7 @@ mod tests {
     #[test]
     fn test_deck_display() {
         let deck = super::Deck::new("Test Deck".to_string(), 0, vec![1, 2, 3], vec![4, 5, 6]);
-        let display = format!("{}", deck);
+        let display = format!("{deck}");
         assert_eq!(
             display,
             "Test Deck\nMainboard:\n1\n2\n3\n\nSideboard:\n4\n5\n6\n"

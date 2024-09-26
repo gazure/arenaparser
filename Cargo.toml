@@ -6,7 +6,7 @@ resolver = "2"
 [workspace.package]
 authors = ["Grant Azure <azure.grant@gmail.com>"]
 categories = []
-version = "0.1.12"
+version = "0.1.13"
 repository = "https://github.com/gazure/arenaparser"
 edition = "2021"
 keywords = ["magic"]
