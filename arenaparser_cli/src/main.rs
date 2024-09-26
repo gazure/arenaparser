@@ -51,7 +51,7 @@ fn main() -> Result<()> {
     let mut match_replay_builder = MatchReplayBuilder::new();
     let mut storage_backends: Vec<Box<dyn ArenaMatchStorageBackend>> = Vec::new();
     let cards_db =
-        ap_core::cards::CardsDatabase::new(args.cards_db.unwrap_or("data/cards-full.json".into()))?;
+        ap_core::cards::CardsDatabase::new(args.cards_db.unwrap_or("data/merged.json".into()))?;
 
     let ctrl_c_rx = ctrl_c_channel()?;
     if let Some(output_dir) = args.output_dir {
