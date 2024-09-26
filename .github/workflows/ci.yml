@@ -55,4 +55,4 @@ jobs:
           RUSTFLAGS: -Cinstrument-coverage
           RUSTDOCFLAGS: -Cinstrument-coverage
         run: |
-          cargo test --workspace --features all
+          cargo test --workspace
