@@ -10,7 +10,7 @@ on:
 jobs:
 
   check:
-    runs-on: windows-x64
+    runs-on: windows-2022
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,7 +23,7 @@ jobs:
           cargo check --workspace --all-targets --all-features
 
   clippy:
-    runs-on: windows-x64
+    runs-on: windows-2022
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,7 +36,7 @@ jobs:
           cargo clippy --all-targets --all-features --examples --tests
 
   fmt:
-    runs-on: windows-x64
+    runs-on: windows-2022
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
