@@ -468,6 +468,8 @@ pub enum GameObjectType {
     Adventure,
     #[serde(rename = "GameObjectType_DisturbBack")]
     DisturbBack,
+    #[serde(rename = "GameObjectType_RoomLeft")]
+    RoomLeft,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

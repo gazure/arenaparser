@@ -528,4 +528,10 @@ pub enum ActionType {
     MakePayment,
     #[serde(rename = "ActionType_OpeningHandAction")]
     OpeningHandAction,
+    #[serde(rename = "ActionType_Special_TurnFaceUp")]
+    SpecialTurnFaceUp,
+    #[serde(rename = "ActionType_CastLeftRoom")]
+    CastLeftRoom,
+    #[serde(rename = "ActionType_CastRightRoom")]
+    CastRightRoom,
 }
