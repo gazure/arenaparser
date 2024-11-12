@@ -4,11 +4,14 @@ use std::time::Duration;
 use anyhow::Result;
 use clap::Parser;
 use crossbeam::channel::{select, unbounded, Receiver};
+use tracing::error;
 
 use ap_core::match_insights::MatchInsightDB;
 use ap_core::processor::{ArenaEventSource, PlayerLogProcessor};
 use ap_core::replay::MatchReplayBuilder;
 use ap_core::storage_backends::{ArenaMatchStorageBackend, DirectoryStorageBackend};
+
+const PLAYER_LOG_POLLING_INTERVAL: u64 = 1;
 
 #[derive(Debug, Parser)]
 #[command(about = "Tries to scrape useful data from mtga detailed logs")]
@@ -71,14 +74,20 @@ fn main() -> Result<()> {
             recv(ctrl_c_rx) -> _ => {
                 break;
             }
-            // notify crate doesn't fully capture fs events like I want it to
-            default(Duration::from_secs(1)) => {
+            default(Duration::from_secs(PLAYER_LOG_POLLING_INTERVAL)) => {
                 while let Some(parse_output) = processor.get_next_event() {
                     if match_replay_builder.ingest_event(parse_output) {
-
-                        let match_replay = match_replay_builder.build()?;
-                        for backend in &mut storage_backends {
-                            backend.write(&match_replay)?;
+                        match match_replay_builder.build() {
+                            Ok(match_replay) => {
+                                for backend in &mut storage_backends {
+                                    if let Err(e) =backend.write(&match_replay){
+                                        error!("Error writing replay to backend: {e}");
+                                    }
+                                }
+                            },
+                            Err(err) => {
+                                error!("Error building match replay: {err}");
+                            }
                         }
                         match_replay_builder = MatchReplayBuilder::new();
                     }

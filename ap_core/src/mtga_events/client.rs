@@ -257,7 +257,7 @@ pub struct CancelActionReq {}
 #[serde(rename_all = "camelCase")]
 pub struct CastingTimeOptionResp {
     pub casting_time_option_type: CastingTimeOptionType,
-    pub cto_id: i32,
+    pub cto_id: Option<i32>,
     pub select_n_resp: Option<SelectNResp>,
 }
 
@@ -534,4 +534,8 @@ pub enum ActionType {
     CastLeftRoom,
     #[serde(rename = "ActionType_CastRightRoom")]
     CastRightRoom,
+    #[serde(rename = "ActionType_CastRight")]
+    CastRight,
+    #[serde(rename = "ActionType_CastLeft")]
+    CastLeft,
 }

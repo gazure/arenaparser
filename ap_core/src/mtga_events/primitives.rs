@@ -126,6 +126,7 @@ pub struct AutoTapSolution {
 #[serde(rename_all = "camelCase")]
 pub struct TargetCollection {
     pub target_idx: i32,
+    #[serde(default)]
     pub targets: Vec<Target>,
 }
 

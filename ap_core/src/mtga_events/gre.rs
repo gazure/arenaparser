@@ -44,7 +44,7 @@ pub struct RequestTypeGREToClientEvent {
     pub gre_to_client_event: GREToClientEvent,
     pub request_id: Option<i32>,
     pub timestamp: String,
-    pub transaction_id: String,
+    pub transaction_id: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -276,6 +276,7 @@ pub struct ActionsAvailableReq {
 pub struct SelectTargetsReq {
     pub ability_grp_id: i32,
     pub source_id: Option<i32>,
+    #[serde(default)]
     pub targets: Vec<SelectTargetsSpec>,
 }
 
@@ -472,6 +473,8 @@ pub enum GameObjectType {
     RoomLeft,
     #[serde(rename = "GameObjectType_RoomRight")]
     RoomRight,
+    #[serde(rename = "GameObjectType_SplitLeft")]
+    SplitLeft,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
