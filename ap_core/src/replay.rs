@@ -135,10 +135,10 @@ impl MatchReplay {
         let opponent_cards = self
             .game_state_messages_iter()
             .flat_map(|gsm| &gsm.game_objects)
-            .filter(|game_object| game_object.owner_seat_id != controller_id)
             .filter(|game_object| {
-                game_object.type_field == GameObjectType::Card
-                    || game_object.type_field == GameObjectType::MDFCBack
+                game_object.owner_seat_id != controller_id
+                    && (game_object.type_field == GameObjectType::Card
+                        || game_object.type_field == GameObjectType::MDFCBack)
             })
             .map(|game_object| game_object.grp_id)
             .collect();
@@ -190,14 +190,15 @@ impl MatchReplay {
     }
 
     fn get_sideboarded_decklists(&self) -> Vec<DeckMessage> {
-        let mut decklists = Vec::new();
-
-        for message in self.client_messages_iter() {
-            if let ClientMessage::SubmitDeckResp(submit_deck_resp) = &message.payload {
-                decklists.push(submit_deck_resp.submit_deck_resp.deck.clone());
-            }
-        }
-        decklists
+        self.client_messages_iter()
+            .filter_map(|message| {
+                if let ClientMessage::SubmitDeckResp(submit_deck_resp) = &message.payload {
+                    Some(submit_deck_resp.submit_deck_resp.deck.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     /// # Errors
@@ -377,6 +378,15 @@ impl MatchReplay {
         self.business_messages.iter().find_map(|bm| bm.event_time)
     }
 
+    /// Gets the format for this match if found (e.g. "`Traditional_Explorer_Ranked`")
+    /// MTGA usually underscore-spaces format names
+    pub fn match_format(&self) -> Option<String> {
+        self.business_messages
+            .iter()
+            .find(|message| message.event_id.is_some())
+            .and_then(|message| message.event_id.clone())
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = MatchReplayEventRef> {
         self.into_iter()
     }
@@ -407,18 +417,39 @@ impl<'a> IntoIterator for &'a MatchReplay {
 
 #[derive(Debug, Default)]
 pub struct MatchReplayBuilder {
-    pub match_id: String,
-    pub match_start_message: RequestTypeMGRSCEvent,
-    pub match_end_message: RequestTypeMGRSCEvent,
+    pub match_id: Option<String>,
+    pub match_start_message: Option<RequestTypeMGRSCEvent>,
+    pub match_end_message: Option<RequestTypeMGRSCEvent>,
     pub client_server_messages: Vec<MatchReplayEvent>,
     pub business_messages: Vec<BusinessEventRequest>,
 }
 
+#[derive(Debug)]
+pub enum MatchReplayBuilderError {
+    MissingMatchId,
+    MissingMatchStartMessage,
+    MissingMatchEndMessage,
+}
+
+impl std::fmt::Display for MatchReplayBuilderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::MissingMatchId => "Missing Match Id",
+                Self::MissingMatchStartMessage => "Missing Match Start Message",
+                Self::MissingMatchEndMessage => "Missing Match End Message",
+            }
+        )
+    }
+}
+
+impl std::error::Error for MatchReplayBuilderError {}
+
 impl MatchReplayBuilder {
     pub fn new() -> Self {
-        Self {
-            ..Default::default()
-        }
+        Self::default()
     }
 
     pub fn ingest_event(&mut self, event: ParseOutput) -> bool {
@@ -454,13 +485,13 @@ impl MatchReplayBuilder {
         match state_type {
             StateType::MatchCompleted => {
                 // match is over
-                self.match_end_message = mgrsc_event;
+                self.match_end_message = Some(mgrsc_event);
                 return true;
             }
             StateType::Playing => {
                 info!("found match: {}", match_id);
-                self.match_id = match_id;
-                self.match_start_message = mgrsc_event;
+                self.match_id = Some(match_id);
+                self.match_start_message = Some(mgrsc_event);
             }
         }
         false
@@ -471,11 +502,20 @@ impl MatchReplayBuilder {
     /// Returns an error if the builder is missing key information
     /// except it doesn't right now, so don't worry about it
     pub fn build(self) -> Result<MatchReplay> {
-        // TODO: add some Err states to this
+        let match_id = self
+            .match_id
+            .ok_or(MatchReplayBuilderError::MissingMatchId)?;
+        let match_start_message = self
+            .match_start_message
+            .ok_or(MatchReplayBuilderError::MissingMatchStartMessage)?;
+        let match_end_message = self
+            .match_end_message
+            .ok_or(MatchReplayBuilderError::MissingMatchEndMessage)?;
+
         let match_replay = MatchReplay {
-            match_id: self.match_id,
-            match_start_message: self.match_start_message,
-            match_end_message: self.match_end_message,
+            match_id,
+            match_start_message,
+            match_end_message,
             client_server_messages: self.client_server_messages,
             business_messages: self.business_messages,
         };
