@@ -4,7 +4,7 @@ use include_dir::{include_dir, Dir};
 use lazy_static::lazy_static;
 use rusqlite::{Connection, Params as RusqliteParams, Result as RusqliteResult, Transaction};
 use rusqlite_migration::Migrations;
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::cards::CardsDatabase;
 use crate::models::deck::Deck;
@@ -135,7 +135,7 @@ impl MatchInsightDB {
     pub fn get_match_results(&mut self, match_id: &str) -> Result<Vec<MatchResult>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT game_number, winning_team_id, result_scope FROM match_results WHERE match_id = ?1 AND game_number IS NOT NULL")?;
+            .prepare("SELECT game_number, winning_team_id, result_scope FROM match_results WHERE match_id = ?1 AND game_number > 0")?;
         let results = stmt
             .query_map([match_id], |row| {
                 let game_number: i32 = row.get(0)?;
@@ -144,7 +144,7 @@ impl MatchInsightDB {
 
                 Ok(MatchResult {
                     match_id: match_id.to_string(),
-                    game_number: Some(game_number),
+                    game_number,
                     winning_team_id,
                     result_scope,
                 })
@@ -270,11 +270,12 @@ impl ArenaMatchStorageBackend for MatchInsightDB {
 
         // not too keen on this data model
         let match_results = match_replay.get_match_results()?;
+        debug!("{:?}", match_results);
         for (i, result) in match_results.result_list.iter().enumerate() {
             let game_number = if result.scope == "MatchScope_Game" {
-                i32::try_from(i + 1).ok()
+                i32::try_from(i + 1).unwrap_or(0)
             } else {
-                None
+                0
             };
 
             let match_result = MatchResultBuilder::default()
