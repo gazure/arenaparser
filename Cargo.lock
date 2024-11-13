@@ -86,7 +86,7 @@ checksum = "86fdf8605db99b54d3cd748a44c6d04df638eb5dafb219b135d0149bd0db01f6"
 
 [[package]]
 name = "ap_core"
-version = "0.1.13"
+version = "0.1.15"
 dependencies = [
  "anyhow",
  "chrono",
@@ -103,7 +103,7 @@ dependencies = [
 
 [[package]]
 name = "arenaparser_cli"
-version = "0.1.13"
+version = "0.1.15"
 dependencies = [
  "anyhow",
  "ap_core",
