@@ -75,7 +75,7 @@ fn main() -> Result<()> {
                 break;
             }
             default(Duration::from_secs(PLAYER_LOG_POLLING_INTERVAL)) => {
-                while let Some(parse_output) = processor.get_next_event() {
+                while let Ok(parse_output) = processor.get_next_event() {
                     if match_replay_builder.ingest_event(parse_output) {
                         match match_replay_builder.build() {
                             Ok(match_replay) => {
