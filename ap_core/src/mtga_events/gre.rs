@@ -341,7 +341,9 @@ pub struct ConnectResp {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeckMessage {
+    #[serde(default)]
     pub deck_cards: Vec<i32>,
+    #[serde(default)]
     pub sideboard_cards: Vec<i32>,
 }
 
